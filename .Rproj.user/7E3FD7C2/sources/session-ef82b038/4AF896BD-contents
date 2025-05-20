@@ -1,0 +1,219 @@
+library(dplyr)
+library(readr)
+library(lme4)
+#library(DHARMa)
+library(ggplot2)
+library("performance") #from https://github.com/easystats/performance
+library(car)
+library(lmerTest)
+
+
+devtools::install_github("dustinfife/flexplot")
+# install the development version
+devtools::install_github("dustinfife/flexplot", ref="development")
+
+library(flexplot)
+
+
+#Getting directory R file is in and setting it as the current working dir
+if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+} else {
+  args <- commandArgs(trailingOnly = FALSE)
+  scriptPath <- sub("--file=", "", args[grep("--file=", args)])
+  if (length(scriptPath) > 0) {
+    setwd(dirname(scriptPath))
+  } else {
+    stop("Cannot determine the script path.")
+  }
+}
+
+#Reading in dataset
+dataset_path <- file.path(".", "Dataset_for_George.csv")
+all_datasets_v2 <- read_csv(dataset_path)
+
+#Each subheader is a different experimental factor 
+##----time_until_sample_usage----
+#Fitting model
+mixed_model_time_until_sample_usage <- lmer(DSS2 ~ time_until_sample_usage + (1 + lab|drug) , all_datasets_v2)
+acf(resid(mixed_model_time_until_sample_usage))
+plot(ranef(mixed_model_time_until_sample_usage), main = "Random Effects")
+#sim_res <- simulateResiduals(fittedModel = mixed_model_time_until_sample_usage)
+#plot(sim_res)
+
+#Plotting redisuals for each drug
+ggplot(all_datasets_v2, aes(x = drug, y = resid(mixed_model_time_until_sample_usage))) +
+  geom_boxplot() +
+  labs(title = "Residuals by Group", x = "Group", y = "Residuals") +
+  theme_minimal()
+
+#Plotting fitted vs residual
+ggplot(all_datasets_v2, aes(x = fitted(mixed_model_time_until_sample_usage), y = resid(mixed_model_time_until_sample_usage), color=drug)) +
+  geom_point() +
+  labs(title = "Fitted vs Residual", x = "Fitted", y = "Residuals") +
+  theme_minimal()
+
+#Visualising the model using flexplot
+visualize(mixed_model_time_until_sample_usage)
+#Getting a summary of the model
+summary(mixed_model_time_until_sample_usage)
+#Model diagnostics
+check_model(mixed_model_time_until_sample_usage)
+#Outliers
+influencePlot(mixed_model_time_until_sample_usage, main = "Residuals vs Leverage")
+
+#Checking model fit
+mixed_model_time_until_sample_usage_1 <- lmer(DSS2 ~ time_until_sample_usage +(1|drug) , all_datasets_v2)
+summary(mixed_model_time_until_sample_usage_1)
+check_model(mixed_model_time_until_sample_usage_1)
+mixed_model_time_until_sample_usage_2 <- lmer(DSS2 ~ time_until_sample_usage  + (1|lab) + (1|drug), all_datasets_v2)
+summary(mixed_model_time_until_sample_usage_2)
+check_model(mixed_model_time_until_sample_usage_2)
+mixed_model_time_until_sample_usage_3 <- lmer(DSS2 ~ time_until_sample_usage  + (1|drug/lab), all_datasets_v2)
+summary(mixed_model_time_until_sample_usage_3)
+check_model(mixed_model_time_until_sample_usage_3)
+#Checking which model fit is best
+anova(mixed_model_time_until_sample_usage_1, mixed_model_time_until_sample_usage_2,mixed_model_time_until_sample_usage, mixed_model_time_until_sample_usage_3)
+AIC(lm(DSS2 ~ time_until_sample_usage + drug + lab, data = all_datasets_v2), mixed_model_time_until_sample_usage_1, mixed_model_time_until_sample_usage_2, mixed_model_time_until_sample_usage_3, mixed_model_time_until_sample_usage)
+
+#Plotting model predictions per drug
+ggplot(all_datasets_v2, aes(time_until_sample_usage, DSS2)) +
+  geom_point() +
+  geom_line(aes(y=predict(mixed_model_time_until_sample_usage), group=drug, color=drug)) 
+
+
+###----Testing Transformation----
+#Log transformation
+df_transformed_dss <- all_datasets_v2 %>%
+  group_by(drug, lab) %>%
+  mutate(log_dss = log(DSS2)) %>%
+  mutate(log10_dss = log10(DSS2)) %>%
+  mutate(scale_dss = scale(DSS2)) %>%
+  ungroup %>%
+  as.data.frame()
+
+df_transformed_dss_log <- subset(df_transformed_dss, !is.na(log_dss) & is.finite(log_dss))
+log_transformed_model <- lmer(log_dss ~ time_until_sample_usage + (1 + lab |drug) , df_transformed_dss_log)
+check_model(log_transformed_model)
+summary(log_transformed_model)
+
+df_transformed_dss_log_10 <- subset(df_transformed_dss, !is.na(log10_dss) & is.finite(log10_dss))
+log10_transformed_model <- lmer(log_dss ~ time_until_sample_usage + (1 + lab |drug) , df_transformed_dss_log_10)
+check_model(log10_transformed_model)
+summary(log10_transformed_model)
+
+scaled_dss_model <- lmer(log_dss ~ time_until_sample_usage + (1 + lab |drug) , df_transformed_dss_log_10)
+check_model(scaled_dss_model)
+summary(scaled_dss_model)
+
+#Getting mean of each drug
+df_transformed_dss <- all_datasets_v2 %>%
+  group_by(drug, lab) %>%
+  mutate(mean_dss = mean(DSS2)) %>%
+  ungroup %>%
+  as.data.frame()
+
+df_transformed_dss <- df_transformed_dss[, !(names(df_transformed_dss) %in% c("DSS2", "Patient.num"))] %>%
+  group_by(drug, lab) %>%
+  slice(1) %>%
+  as.data.frame()
+
+mean_dss_model <- lmer(mean_dss ~ time_until_sample_usage + (1 |drug) , df_transformed_dss)
+check_model(mean_dss_model)
+summary(mean_dss_model)
+
+ggplot(df_transformed_dss, aes(drug, mean_dss)) +
+  geom_boxplot() 
+
+###----Weighted model ----
+#Computing weights
+weights <- 1 / (fitted(mixed_model_time_until_sample_usage)^2) 
+weights_1 <- 1 / lm(abs(resid(mixed_model_time_until_sample_usage)) ~ fitted(mixed_model_time_until_sample_usage))$fitted.values^2
+
+#Fit the weighted model
+wls_model <- lm(DSS2 ~ time_until_sample_usage, data = all_datasets_v2, weights = weights)
+summary(wls_model)
+#Model diagnostics
+check_model(wls_model)
+
+##----medium----
+mixed_model_medium <- lmer(DSS2 ~ medium + (1 + lab|drug) , all_datasets_v2)
+visualize(mixed_model_medium)
+summary(mixed_model_medium)
+check_model(mixed_model_medium)
+influencePlot(mixed_model_medium)
+
+mixed_model_medium_1 <- lmer(DSS2 ~ medium +(1|drug) , all_datasets_v2)
+mixed_model_medium_2 <- lmer(DSS2 ~ medium  + (1|lab)+(1 |drug) , all_datasets_v2)
+mixed_model_medium_3 <- lmer(DSS2 ~ medium  +(1 + lab|drug) , all_datasets_v2)
+anova(mixed_model_medium_1, mixed_model_medium_2,mixed_model_medium_3)
+
+##----cells----
+mixed_model_cells <- lmer(DSS2 ~ cells +(1 + lab|drug) , all_datasets_v2)
+visualize(mixed_model_cells)
+summary(mixed_model_cells)
+check_model(mixed_model_cells)
+
+mixed_model_cells_1 <- lmer(DSS2 ~ cells +(1|drug) , all_datasets_v2)
+mixed_model_cells_2 <- lmer(DSS2 ~ cells  + (1|lab)+(1 |drug) , all_datasets_v2)
+mixed_model_cells_3 <- lmer(DSS2 ~ cells  +(1 + lab|drug) , all_datasets_v2)
+anova(mixed_model_cells_1, mixed_model_cells_2,mixed_model_cells_3)
+
+
+##----micro_env_stimuli----
+mixed_model_micro_env_stimuli <- lmer(DSS2 ~ microenvironmental_stimuli + (1 + lab|drug) , all_datasets_v2, control =  lmerControl(optimizer = "bobyqa"))
+visualize(mixed_model_micro_env_stimuli)
+summary(mixed_model_micro_env_stimuli)
+check_model(mixed_model_micro_env_stimuli)
+
+mixed_model_micro_env_stimuli_1 <- lmer(DSS2 ~ microenvironmental_stimuli +(1|drug) , all_datasets_v2)
+mixed_model_micro_env_stimuli_2 <- lmer(DSS2 ~ microenvironmental_stimuli  + (1|lab)+(1 |drug) , all_datasets_v2)
+mixed_model_micro_env_stimuli_3 <- lmer(DSS2 ~ microenvironmental_stimuli  +(1 + lab|drug) , all_datasets_v2)
+anova(mixed_model_micro_env_stimuli_1, mixed_model_micro_env_stimuli_2,mixed_model_micro_env_stimuli_3)
+
+##----cell_counting_method----
+mixed_model_cell_counting_method <- lmer(DSS2 ~ cell_counting_method + (1 + lab|drug) , all_datasets_v2)
+visualize(mixed_model_cell_counting_method)
+summary(mixed_model_cell_counting_method)
+check_model(mixed_model_cell_counting_method)
+
+mixed_model_cell_counting_method_1 <- lmer(DSS2 ~ cell_counting_method +(1|drug) , all_datasets_v2)
+mixed_model_cell_counting_method_2 <- lmer(DSS2 ~ cell_counting_method  + (1|lab)+(1 |drug) , all_datasets_v2)
+mixed_model_cell_counting_method_3 <- lmer(DSS2 ~ cell_counting_method  +(1 + lab|drug) , all_datasets_v2)
+anova(mixed_model_cell_counting_method_1, mixed_model_cell_counting_method_2,mixed_model_cell_counting_method_3)
+
+
+##----sensitivity_readout_and_positive_control----
+mixed_model_sensitivity_readout_and_positive_control <- lmer(DSS2 ~ positive_control + (1 + lab|drug) , all_datasets_v2)
+visualize(mixed_model_sensitivity_readout_and_positive_control)
+summary(mixed_model_sensitivity_readout_and_positive_control)
+check_model(mixed_model_sensitivity_readout_and_positive_control)
+
+mixed_model_sensitivity_readout_and_positive_control_1 <- lmer(DSS2 ~  positive_control +(1|drug) , all_datasets_v2)
+mixed_model_sensitivity_readout_and_positive_control_2 <- lmer(DSS2 ~  positive_control  + (1|lab)+(1 |drug) , all_datasets_v2)
+mixed_model_sensitivity_readout_and_positive_control_3 <- lmer(DSS2 ~  positive_control  +(1 + lab|drug) , all_datasets_v2)
+anova(mixed_model_sensitivity_readout_and_positive_control_1, mixed_model_sensitivity_readout_and_positive_control_2,mixed_model_sensitivity_readout_and_positive_control_3)
+
+
+##----centrifugation_procedure----
+mixed_model_centrifugation_procedure <- lmer(DSS2 ~ centrifugation_procedure + (1 + lab|drug) , all_datasets_v2)
+visualize(mixed_model_centrifugation_procedure)
+summary(mixed_model_centrifugation_procedure)
+check_model(mixed_model_centrifugation_procedure)
+
+mixed_model_centrifugation_procedure_1 <- lmer(DSS2 ~ centrifugation_procedure +(1|drug) , all_datasets_v2)
+mixed_model_centrifugation_procedure_2 <- lmer(DSS2 ~ centrifugation_procedure  + (1|lab)+(1 |drug) , all_datasets_v2)
+mixed_model_centrifugation_procedure_3 <- lmer(DSS2 ~ centrifugation_procedure  +(1 + lab|drug) , all_datasets_v2)
+anova(mixed_model_centrifugation_procedure_1, mixed_model_centrifugation_procedure_2,mixed_model_centrifugation_procedure_3)
+
+
+##----plate_reader----
+mixed_model_plate_reader <- lmer(DSS2 ~ plate_reader + (1 + lab|drug) , all_datasets_v2)
+visualize(mixed_model_plate_reader)
+summary(mixed_model_plate_reader)
+check_model(mixed_model_plate_reader)
+
+mixed_model_plate_reader_1 <- lmer(DSS2 ~ plate_reader +(1|drug) , all_datasets_v2)
+mixed_model_plate_reader_2 <- lmer(DSS2 ~ plate_reader  + (1|lab)+(1 |drug) , all_datasets_v2)
+mixed_model_plate_reader_3 <- lmer(DSS2 ~ plate_reader  +(1 + lab|drug) , all_datasets_v2)
+anova(mixed_model_plate_reader_1, mixed_model_plate_reader_2,mixed_model_plate_reader_3)

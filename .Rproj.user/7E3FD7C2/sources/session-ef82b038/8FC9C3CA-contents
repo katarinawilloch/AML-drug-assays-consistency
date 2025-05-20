@@ -1,0 +1,350 @@
+
+################################# Correct Tero
+library(openxlsx)
+dataset_ = openxlsx::read.xlsx("raw_data_all_plates_breeze_input_format.xlsx")
+dataset_$WELL <- gsub("([A-Z])0([0-9])", "\\1\\2", dataset_$WELL)
+#openxlsx::write.xlsx(dataset_, "tryBreezeOnceMore.xlsx")
+dataset_$BARCODE = paste0(dataset_$PLATE, "_", dataset_$SCREEN_NAME)
+
+dataset_controls = dataset_[toupper(dataset_$DRUG_NAME) %in% c("BZCL","DMSO"),]
+dataset_ <- dataset_ %>% group_by(BARCODE, DRUG_NAME) %>% filter(n_distinct(CONCENTRATION) >= 4) %>% as.data.frame()
+dataset_ = rbind(dataset_, dataset_controls)
+
+dataset_new = c()
+
+for(baaa in unique(dataset_$BARCODE)){
+  # just one plate
+  dt_plate = dataset_[dataset_$BARCODE == baaa,] 
+  
+  # BZCL and DMSO
+  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="BZCL"] = "BZCL";  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="DMSO"] = "DMSO"; 
+  
+  # Define row labels correctly
+  dt_plate <- dt_plate %>%
+    mutate(Row = ifelse(grepl("^\\D{2}", WELL), substring(WELL, 1, 2), substring(WELL, 1, 1)),
+           Column = ifelse(grepl("^\\D{2}", WELL), substring(WELL, 3), substring(WELL, 2, 3)))
+  
+  convert_label_to_number <- function(label) {
+    chars <- strsplit(label, "")[[1]]
+    num <- sum((match(chars, LETTERS) - 1) * 26^(rev(seq_along(chars)) - 1)) + 1
+    return(num)
+  }
+  
+  # Arrange the data frame by label length, then by numeric label value, then by column
+  dt_plate <- dt_plate %>%
+    mutate(LabelLength = nchar(Row), RowNum = sapply(Row, convert_label_to_number)) %>%
+    arrange(LabelLength, RowNum, as.numeric(Column))
+  
+  dt_plate$Row = factor(dt_plate$Row, levels = unique(dt_plate$Row))
+  dt_plate$Column = factor(dt_plate$Column, levels = unique(dt_plate$Column))
+  
+  neg_ctrl <- dt_plate[dt_plate$DRUG_NAME %in% "DMSO",c("Row","WELL_SIGNAL")]
+  top_5_averages <- dt_plate %>% group_by(Row) %>% arrange(desc(WELL_SIGNAL)) %>% slice_head(n = 10) %>% # actually 10 were used
+    summarise(WELL_SIGNAL = median(WELL_SIGNAL)) %>% ungroup()
+  
+  neg_ctrl_merged <- aggregate(WELL_SIGNAL ~ Row, 
+                      data = rbind(neg_ctrl, top_5_averages), max)
+  
+  neg_ctrl_merged = neg_ctrl_merged[order(neg_ctrl_merged$Row),]
+  neg_ctrl_merged$Row = factor(neg_ctrl_merged$Row, levels = unique(neg_ctrl_merged$Row))
+  
+  # Option 1: Adaptive smoothing with P-splines
+  library(mgcv)
+  
+  # Alternative with explicit control parameters
+  fit2 <- smooth.spline(neg_ctrl_merged$Row, 
+                        neg_ctrl_merged$WELL_SIGNAL,
+                        df = length(unique(neg_ctrl_merged$Row)) * 0.8,  # More degrees of freedom
+                        control.spar = list(low = 0.1, high = 1))
+
+  # Function to do one pass of centered median smoothing
+  # Preserving 2 points on each end
+  smooth_once <- function(x) {
+    n <- length(x)
+    # Only smooth points from 3 to n-2
+    smoothed <- sapply(3:(n-2), function(i) {
+      mean(x[(i-1):(i+1)])  # centered window of 3 points
+    })
+    # Keep first two and last two points unchanged
+    c(x[1:2], smoothed, x[(n-1):n])
+  }
+  
+  # Apply multiple passes
+  fitted_vals <- predict(fit2)$y
+  smooth_fitted <- fitted_vals
+  n_passes <- 1
+  
+  for(i in 1:n_passes) {
+    smooth_fitted <- smooth_once(smooth_fitted)
+  }
+  
+  # # Quick plot
+  png(paste0("./fits/",baaa,"_xxx.png"))
+  # Plot
+  plot(neg_ctrl$WELL_SIGNAL, type="p", col="gray", main="Multi-pass Centered Smoothing", ylim=c(0, 1000000))
+  lines(fitted_vals, col="blue", lwd=1, lty=2)  # original fit
+  lines(smooth_fitted, col="red", lwd=2)  # final smoothed version
+  dev.off()
+  
+  neg_ctrl =  data.frame(Row = unique(neg_ctrl_merged$Row), WELL_SIGNAL = fitted_vals)
+
+  neg_ctrl$DRUG_NAME = "DMSO"; neg_ctrl$BARCODE = dt_plate$BARCODE[1]; neg_ctrl$SCREEN_NAME = dt_plate$SCREEN_NAME[1];
+  dt_plate = plyr::rbind.fill(neg_ctrl, dt_plate[!(dt_plate$DRUG_NAME %in% "DMSO"),])
+  
+  # BZCL and DMSO
+  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="BZCL"] = "BZCL";  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="DMSO"] = "DMSO"; 
+  
+  # Calculate %inhibition
+  pos_ctrl <- na.omit(outlier_remove(dt_plate$WELL_SIGNAL[dt_plate$DRUG_NAME %in% "BZCL"]))
+  #neg_ctrl <- na.omit(outlier_remove(dt_plate$WELL_SIGNAL[dt_plate$DRUG_NAME %in% "DMSO"]))
+
+  # First identify DMSO controls for each row
+  dmso_controls <- dt_plate[dt_plate$DRUG_NAME == "DMSO", ]
+  row_dmso <- aggregate(WELL_SIGNAL ~ Row, data = dmso_controls, FUN = mean, na.rm = TRUE)
+  names(row_dmso)[2] <- "row_dmso_signal"
+  
+  # Merge DMSO values back to original data
+  dt_plate <- merge(dt_plate, row_dmso, by = "Row")
+  
+  # Calculate percent inhibition using row-specific DMSO values
+  avg_low <- mean(pos_ctrl, na.rm = TRUE)  # Assuming pos_ctrl still represents your positive control
+  dt_plate$inhibition_percent <- ((dt_plate$row_dmso_signal - dt_plate$WELL_SIGNAL) / 
+                                    (dt_plate$row_dmso_signal - avg_low)) * 100
+  
+  # to percantage inhibition (column-based)
+  dataset_new = rbind(dataset_new, dt_plate)
+}
+
+dataset_new2 = dataset_new[,c("DRUG_NAME","CONCENTRATION","SCREEN_NAME","inhibition_percent")]
+colnames(dataset_new2) = c("DRUG_NAME","CONCENTRATION","SCREEN_NAME","PERCENT_INHIBITION")
+dataset_new2$CONCENTRATION[is.na(dataset_new2$CONCENTRATION)] = 0
+dataset_new2 = dataset_new2[dataset_new2$CONCENTRATION != 0.0277777777777778,]
+#dataset_new2 <- dataset_new2 %>% mutate(PERCENT_INHIBITION = pmax(0, pmin(100, PERCENT_INHIBITION)))
+
+openxlsx::write.xlsx(dataset_new2, "toBreezePI.xlsx")
+
+
+
+
+############################################################ NEW metric after correction
+# Initialize a dataframe to store the results
+results_df <- data.frame(Iteration = integer(), FilePath = character(), ErrorValue = numeric(), stringsAsFactors = FALSE)
+plot_dir = "./fits"
+
+dataset_new2 <- dataset_new %>% mutate(inhibition_percent = pmax(0, pmin(100, inhibition_percent)))
+for(baaa in unique(dataset_new2$BARCODE)){
+  # just one plate
+  dt_plate = dataset_new2[dataset_new2$BARCODE == baaa,] # this is clearly a 1536 well plate, not 384 (see there many other BARCODES, i.e. plates)
+  
+  # BZCL and DMSO
+  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="BZCL"] = "BZCL";  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="DMSO"] = "DMSO"; 
+
+  # crop to 0 - 100 (replace greater than 100 with 100 and any value less than 0 with 0)
+  dt_plate <- dt_plate %>% mutate(inhibition_percent = pmax(0, pmin(100, inhibition_percent)))
+  
+  # plate statistics
+  #stat_ = data.frame(zfactor =zfactor(neg_ctrl,pos_ctrl), ssmd = ssmd(neg_ctrl,pos_ctrl), plate = baaa)
+  
+  # Z_Prime < 0.5 | SSMD < 6 considered bad, also take other metrics,  
+  # like see https://github.com/IanevskiAleksandr/Breeze/blob/master/QC_PDF_HTML.R line 313 for all
+  
+  library(ggplot2); library(dplyr)
+  
+  # Define row labels correctly
+  dt_plate <- dt_plate %>%
+    mutate(Row = ifelse(grepl("^\\D{2}", WELL), substring(WELL, 1, 2), substring(WELL, 1, 1)),
+           Column = ifelse(grepl("^\\D{2}", WELL), substring(WELL, 3), substring(WELL, 2, 3)))
+  
+  convert_label_to_number <- function(label) {
+    chars <- strsplit(label, "")[[1]]
+    num <- sum((match(chars, LETTERS) - 1) * 26^(rev(seq_along(chars)) - 1)) + 1
+    return(num)
+  }
+  
+  # Arrange the data frame by label length, then by numeric label value, then by column
+  dt_plate <- dt_plate %>%
+    mutate(LabelLength = nchar(Row), RowNum = sapply(Row, convert_label_to_number)) %>%
+    arrange(LabelLength, RowNum, as.numeric(Column))
+  
+  dt_plate$Row = factor(dt_plate$Row, levels = unique(dt_plate$Row))
+  dt_plate$Column = factor(dt_plate$Column, levels = unique(dt_plate$Column))
+  
+  
+  # Plotting the inhibition heatmap
+  library(RColorBrewer)
+  plate_inhibition <- ggplot(dt_plate, aes(x = Column, y = Row, fill = inhibition_percent)) +
+    geom_tile() +
+    scale_fill_gradientn(colors = colorRampPalette(brewer.pal(9, "Reds"))(100)) +
+    labs(title = "Inhibition Percent Heatmap", x = "Column", y = "Row", fill = "Inhibition %") +
+    theme_minimal()
+  
+  # they obviously have edges empty (no drugs), which we should never consider as problematic (it is fine)
+  
+  # fit curves
+  source("analyzecurve.R")
+  dt_plate = dt_plate[!is.na(dt_plate$DRUG_NAME) & dt_plate$DRUG_NAME!="DMSO" & dt_plate$DRUG_NAME!="BZCL",]
+  
+  filtered_dfDSRT_BREEZE = lapply(unique(dt_plate$DRUG_NAME), function(dd_){
+    tmp_ = dt_plate[dt_plate$DRUG_NAME==dd_,]
+    tmp_out = calculate_all(tmp_$CONC, tmp_$inhibition_percent, "", tmp_$DRUG_NAME[1], 2, WELL = tmp_$WELL)
+    tmp_ = merge(tmp_out[,c("dose","residuals","WELL","fitted","DSS","MAX")], tmp_, by = "WELL")
+    tmp_
+  })
+  filtered_dfDSRT_BREEZE = do.call("rbind", filtered_dfDSRT_BREEZE) 
+  
+  # TODO 
+  filtered_dfDSRT_BREEZE$residuals = abs(filtered_dfDSRT_BREEZE$residuals)
+  
+  # Step 1: Convert fitted values to proportions
+  filtered_dfDSRT_BREEZE$fitted_proportion <- filtered_dfDSRT_BREEZE$fitted / 100
+  # Step 2: Calculate the revised normalization factor
+  filtered_dfDSRT_BREEZE$normalization_factor <- 1 + (filtered_dfDSRT_BREEZE$fitted_proportion * (1 - filtered_dfDSRT_BREEZE$fitted_proportion) / 0.25)
+  filtered_dfDSRT_BREEZE$residualsnorm <- filtered_dfDSRT_BREEZE$residuals * filtered_dfDSRT_BREEZE$normalization_factor
+  
+  # Plotting the error heatmap
+  library(RColorBrewer)
+  plate_error <- ggplot(filtered_dfDSRT_BREEZE, aes(x = Column, y = Row, fill = residuals)) +
+    geom_tile() +
+    scale_fill_gradientn(limits = c(0, 50), colors = colorRampPalette(brewer.pal(9, "Reds"))(100)) +
+    labs(title = "Error Heatmap", x = "Column", y = "Row", fill = "Error inhibition %") +
+    theme_minimal()
+  
+  # Plotting the error norm heatmap
+  library(RColorBrewer)
+  plate_error_norm <- ggplot(filtered_dfDSRT_BREEZE, aes(x = Column, y = Row, fill = residualsnorm)) +
+    geom_tile() +
+    scale_fill_gradientn(limits = c(0, 100), colors = colorRampPalette(brewer.pal(9, "Reds"))(100)) +
+    labs(title = "Error Norm Response", x = "Column", y = "Row", fill = "Error inhibition %") +
+    theme_minimal()
+  
+  library(patchwork)
+  plot_ = plate_inhibition + plate_error_norm #+ plate_error
+  error = mean(filtered_dfDSRT_BREEZE$residuals)
+  error2 = mean(filtered_dfDSRT_BREEZE$residualsnorm)
+  # error3 = median(filtered_dfDSRT_BREEZE$residualsnorm2)
+  # error4 = median(filtered_dfDSRT_BREEZE$residualsnorm3)
+  
+  # Generate plot file name and save the plot
+  plot_file_path <- sprintf("%s/plot_%s.png", plot_dir, baaa)
+  ggsave(plot_file_path, plot = plot_, width = 12, height = 6, dpi = 300)
+  
+  # Add the file path and error to the results dataframe
+  results_df <- rbind(results_df, data.frame(Iteration = baaa, FilePath = plot_file_path,
+                                             plate = baaa, ErrorValue = error, ErrorValueNorm = error2))
+}
+
+
+bad_quality_plates2 = merge(bad_quality_plates, results_df, by = "Iteration")
+
+
+library(ggplot2)
+
+ggplot(bad_quality_plates2, aes(x = ErrorValueNorm.x, y = ErrorValueNorm.y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  xlim(2, 30) +
+  ylim(2, 30) +
+  xlab("Before Correction") +
+  ylab("After Correction") +
+  theme_bw() +
+  ggtitle("Error Values Before vs After Correction")
+
+
+
+################################################# compare replicates
+
+library(openxlsx)
+dataset_ = openxlsx::read.xlsx("raw_data_all_plates_breeze_input_format.xlsx")
+dataset_$WELL <- gsub("([A-Z])0([0-9])", "\\1\\2", dataset_$WELL)
+#openxlsx::write.xlsx(dataset_, "tryBreezeOnceMore.xlsx")
+dataset_$BARCODE = paste0(dataset_$PLATE, "_", dataset_$SCREEN_NAME)
+
+dataset_controls = dataset_[toupper(dataset_$DRUG_NAME) %in% c("BZCL","DMSO"),]
+dataset_ <- dataset_ %>% group_by(BARCODE, DRUG_NAME) %>% filter(n_distinct(CONCENTRATION) >= 4) %>% as.data.frame()
+dataset_ = rbind(dataset_, dataset_controls)
+
+dataset_original = c()
+for(baaa in unique(dataset_$BARCODE)){
+  # just one plate
+  dt_plate = dataset_[dataset_$BARCODE == baaa,] # this is clearly a 1536 well plate, not 384 (see there many other BARCODES, i.e. plates)
+  
+  # BZCL and DMSO
+  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="BZCL"] = "BZCL";  dt_plate$DRUG_NAME[toupper(dt_plate$DRUG_NAME)=="DMSO"] = "DMSO"; 
+  
+  # Calculate %inhibition
+  pos_ctrl <- na.omit(outlier_remove(dt_plate$WELL_SIGNAL[dt_plate$DRUG_NAME %in% "BZCL"]))
+  neg_ctrl <- na.omit(outlier_remove(dt_plate$WELL_SIGNAL[dt_plate$DRUG_NAME %in% "DMSO"]))
+  
+  #Calculate percent inhibition and activation
+  avg_low <- mean(pos_ctrl,na.rm=T); avg_high <- mean(neg_ctrl,na.rm=T)
+  dt_plate$inhibition_percent <- ((avg_high-dt_plate$WELL_SIGNAL)/(avg_high-avg_low))*100
+  dataset_original = rbind(dataset_original, dt_plate)
+}
+
+duplicatesOriginal <- dataset_original %>%
+  group_by(BARCODE, DRUG_NAME, CONCENTRATION) %>%
+  filter(n() > 1) %>%
+  mutate(abs_diff = abs(inhibition_percent - lead(inhibition_percent))) %>%
+  filter(!is.na(abs_diff))
+duplicatesOriginal=  duplicatesOriginal[,c("BARCODE", "DRUG_NAME", "CONCENTRATION","abs_diff")]
+duplicatesOriginal = unique(duplicatesOriginal)
+
+duplicatesNew <- dataset_new %>%
+  group_by(BARCODE, DRUG_NAME, CONCENTRATION) %>%
+  filter(n() > 1) %>%
+  mutate(abs_diffNew = abs(inhibition_percent - lead(inhibition_percent))) %>%
+  filter(!is.na(abs_diffNew))
+duplicatesNew=  duplicatesNew[,c("BARCODE", "DRUG_NAME", "CONCENTRATION","abs_diffNew")]
+duplicatesNew = unique(duplicatesNew)
+
+duplicatesOriginal = duplicatesOriginal[duplicatesOriginal$DRUG_NAME!="BZCL",]
+duplicatesNew = duplicatesNew[duplicatesNew$DRUG_NAME!="BZCL",]
+
+duplicatesOriginal$bbc = paste0(duplicatesOriginal$BARCODE, duplicatesOriginal$DRUG_NAME,duplicatesOriginal$CONCENTRATION)
+duplicatesNew$bbc = paste0(duplicatesNew$BARCODE, duplicatesNew$DRUG_NAME,duplicatesNew$CONCENTRATION)
+
+
+
+# Reshape the data to long format for easier plotting
+duplicates_long <- tidyr::gather(duplicatesMerged, 
+                                 key = "comparison",
+                                 value = "difference",
+                                 abs_diff, abs_diffNew)
+
+library(ggplot2)
+library(dplyr)
+
+
+# Calculate means and medians for each group
+stats_summary <- duplicates_long %>%
+  group_by(comparison) %>%
+  summarise(
+    mean_val = mean(difference, na.rm = TRUE),
+    median_val = median(difference, na.rm = TRUE)
+  )
+# Create enhanced violin plot
+ggplot(duplicates_long, aes(x = comparison, y = difference, fill = comparison)) +
+  geom_violin(trim = FALSE, alpha = 0.8) +
+  geom_boxplot(width = 0.2, alpha = 0.6) +
+  # Add mean points as diamonds
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3, 
+               fill = "white", color = "black") +
+  # Add median points as horizontal lines (already shown in boxplot but can be emphasized)
+  stat_summary(fun = median, geom = "point", shape = 3, size = 3, 
+               color = "black") +
+  # Add text annotations for mean and median values
+  geom_text(data = stats_summary, 
+            aes(y = mean_val, label = sprintf("Mean: %.2f", mean_val)),
+            vjust = -2) +
+  geom_text(data = stats_summary, 
+            aes(y = median_val, label = sprintf("Median: %.2f", median_val)),
+            vjust = 2) +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"),
+                    labels = c("Original Diff", "New Diff")) +
+  theme_minimal() +
+  labs(title = "Comparison of Difference Distributions",
+       x = "",
+       y = "Absolute Difference between replicates (in %inhibition)",
+       fill = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1))

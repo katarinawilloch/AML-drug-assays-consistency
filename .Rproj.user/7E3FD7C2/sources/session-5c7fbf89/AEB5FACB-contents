@@ -1,0 +1,223 @@
+# Install libraries ----
+library(readr)
+library("ggplot2")
+library(ggforce)
+library(dplyr)
+library(stringr)
+library(pheatmap)
+library(tidyr)
+library(reshape2)
+library(RColorBrewer)
+library(tidyverse)
+library(readxl)
+library(DataExplorer)
+library(Hmisc)
+library(htmltools)
+library(VennDiagram)
+library(grid)
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+if (!requireNamespace(c("sva", "pcaMethods"), quietly = TRUE))
+  BiocManager::install(c("sva", "pcaMethods"))
+
+source('~/Desktop/UiO/DSS-v2.0/DSS.R')
+source('~/Desktop/UiO/DSS-v2.0/HelperFunctions.R')
+
+
+
+#import beat aml datasets ----
+beat_aml_inhibitor <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/beat_aml_inhibitor.csv")
+beat_aml_inhibitor$...1 <- NULL
+View(beat_aml_inhibitor)
+
+common_drugs <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/common_drugnames_pubchem.csv")
+common_drugs$`Unnamed: 0_x` <- NULL
+common_drugs$`Unnamed: 0_y` <- NULL
+common_drugs$`Unnamed: 0` <- NULL
+View(common_drugs)
+
+beat_aml_for_dss <- inner_join(common_drugs, beat_aml_inhibitor, by=c("beat_aml_drug_name"="inhibitor"))
+beat_aml_for_dss <- beat_aml_for_dss %>%
+  mutate(patient_id = paste(dbgap_subject_id, inhibitor_panel,replicate,run_index, sep = "_")) %>% as.data.frame()
+# Display the dataframe
+duplicates <- beat_aml_for_dss %>%
+  group_by(patient_id, pubchem_drug_name) %>%
+  filter(n() > 1) %>%
+  ungroup()
+
+# Show the duplicate values
+print(duplicates)
+print(beat_aml_for_dss)
+beat_aml_for_dss <- subset(beat_aml_for_dss, select=c('pubchem_drug_name', 'well_concentration', 'patient_id', 'normalized_viability'))
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "pubchem_drug_name"] <- "DRUG_NAME"
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "well_concentration"] <- "CONCENTRATION_nM"
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "patient_id"] <- "SCREEN_NAME"
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "normalized_viability"] <- "CELL_VIABILITY"
+beat_aml_for_dss$SCREEN_NAME <- as.character(beat_aml_for_dss$SCREEN_NAME)
+
+beat_aml_for_dss$CELL_VIABILITY <- beat_aml_for_dss$CELL_VIABILITY/100
+df_dose_response_beat_aml <- DOSE_RESPONSE_PROCESS(beat_aml_for_dss, viability = TRUE)
+setwd("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/BeatAML/test")
+df_metrics_beat_aml <- CALC_METRICS(df_dose_response_beat_aml[[1]], df_dose_response_beat_aml[[2]], graph = TRUE)
+setwd("/Users/katarinawilloch/")
+
+write_csv(df_metrics_beat_aml, '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_beat_aml.csv')
+
+#########################
+
+#import beat aml datasets ----
+beat_aml_inhibitor <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/beat_aml_inhibitor.csv")
+beat_aml_inhibitor$...1 <- NULL
+View(beat_aml_inhibitor)
+
+common_drugs <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/common_drugnames_pubchem.csv")
+common_drugs$`Unnamed: 0_x` <- NULL
+common_drugs$`Unnamed: 0_y` <- NULL
+common_drugs$`Unnamed: 0` <- NULL
+View(common_drugs)
+
+beat_aml_for_dss <- inner_join(common_drugs, beat_aml_inhibitor, by=c("beat_aml_drug_name"="inhibitor"))
+beat_aml_for_dss <- beat_aml_for_dss %>%
+  mutate(patient_id = paste(dbgap_subject_id, dbgap_dnaseq_sample,dbgap_rnaseq_sample, replicate, sep = "_")) %>% as.data.frame()
+beat_aml_for_dss <- beat_aml_for_dss %>%
+  mutate(test = paste(dbgap_subject_id, dbgap_dnaseq_sample,dbgap_rnaseq_sample, inhibitor_panel, replicate, run_index, sep = "_")) %>% as.data.frame()
+
+# Display the dataframe
+print(beat_aml_for_dss)
+beat_aml_for_dss <- subset(beat_aml_for_dss, select=c('pubchem_drug_name', 'well_concentration', 'patient_id', 'normalized_viability', 'test'))
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "pubchem_drug_name"] <- "DRUG_NAME"
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "well_concentration"] <- "CONCENTRATION_nM"
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "patient_id"] <- "SCREEN_NAME"
+colnames(beat_aml_for_dss)[colnames(beat_aml_for_dss) == "normalized_viability"] <- "CELL_VIABILITY"
+beat_aml_for_dss$SCREEN_NAME <- as.character(beat_aml_for_dss$SCREEN_NAME)
+
+# Display the dataframe
+duplicates <- beat_aml_for_dss %>%
+  arrange(SCREEN_NAME, DRUG_NAME) %>%
+  group_by(SCREEN_NAME, DRUG_NAME) %>%
+  filter(n() > 2) %>%
+  ungroup() 
+
+# Show the duplicate values
+print(duplicates)
+
+beat_aml_for_dss$CELL_VIABILITY <- beat_aml_for_dss$CELL_VIABILITY/100
+df_dose_response_beat_aml <- DOSE_RESPONSE_PROCESS(beat_aml_for_dss, viability = TRUE)
+setwd("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/BeatAML")
+df_metrics_beat_aml <- CALC_METRICS(df_dose_response_beat_aml[[1]], df_dose_response_beat_aml[[2]], graph = FALSE)
+setwd("/Users/katarinawilloch/")
+
+write_csv(df_metrics_beat_aml, '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_beat_aml.csv')
+
+#########################
+
+
+enserink_breeze_input <- read_csv("/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial cleansing/enserink_lab_dose_response.csv")
+View(enserink_breeze_input)
+
+common_drugs <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/common_drugnames_pubchem.csv")
+common_drugs$`Unnamed: 0_x` <- NULL
+common_drugs$`Unnamed: 0_y` <- NULL
+common_drugs$`Unnamed: 0` <- NULL
+View(common_drugs)
+
+for_dss <- inner_join(common_drugs, enserink_breeze_input, by=c("enserink_drug_name"="drug"))
+for_dss <- subset(for_dss, select=c('pubchem_drug_name', 'dose', 'Patient.ID', 'y_true'))
+colnames(for_dss)[colnames(for_dss) == "Patient.ID"] <- "SCREEN_NAME"
+colnames(for_dss)[colnames(for_dss) == "pubchem_drug_name"] <- "DRUG_NAME"
+colnames(for_dss)[colnames(for_dss) == "dose"] <- "CONCENTRATION_nM"
+colnames(for_dss)[colnames(for_dss) == "y_true"] <- "CELL_VIABILITY"
+for_dss$SCREEN_NAME <- as.character(for_dss$SCREEN_NAME)
+for_dss$CONCENTRATION_nM <- as.double(for_dss$CONCENTRATION_nM)
+#for_dss <- for_dss %>%mutate(CONCENTRATION_nM = log(CONCENTRATION_nM))
+options(scipen = 999)
+for_dss$CELL_VIABILITY <-1 - for_dss$CELL_VIABILITY/100
+df_dose_response <- DOSE_RESPONSE_PROCESS(for_dss, viability = TRUE)
+df_dose_response[[2]]$conc
+setwd("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/")
+df_metrics_enserink <- CALC_METRICS(df_dose_response[[1]], df_dose_response[[2]], graph = FALSE)
+setwd("/Users/katarinawilloch/")
+
+write_csv(df_metrics_enserink, '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_enserink.csv')
+x <- for_dss
+colnames(x)[colnames(x) == "CONCENTRATION_nM"] <- "CONCENTRATION"
+colnames(x)[colnames(x) == "CELL_VIABILITY"] <- "PERCENT_INHIBITION"
+write_csv(x, '~/Desktop/UiO/Project 1/Data/Breeze/enserink_input_r.csv')
+
+calc_dss <- function(df, drug_name, conc, screen_name, response, filename, graph = FALSE, viability = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures"){
+  for_dss <- df[,c(drug_name, conc, screen_name, response)]
+  print(for_dss)
+  colnames(for_dss)[colnames(for_dss) == drug_name] <- "DRUG_NAME"
+  colnames(for_dss)[colnames(for_dss) == conc] <- "CONCENTRATION_nM"
+  colnames(for_dss)[colnames(for_dss) == screen_name] <- "SCREEN_NAME"
+  colnames(for_dss)[colnames(for_dss) == response] <- "CELL_VIABILITY"
+  
+  for_dss$SCREEN_NAME <- as.character(for_dss$SCREEN_NAME)
+  for_dss$CONCENTRATION_nM <- as.double(for_dss$CONCENTRATION_nM)
+  
+  df_dose_response <- DOSE_RESPONSE_PROCESS(for_dss, viability = viability)
+  print(df_dose_response)
+  if(graph == TRUE){
+    setwd(set_dir)
+    df_metrics <- CALC_METRICS(df_dose_response[[1]], df_dose_response[[2]], graph = TRUE)
+    setwd("/Users/katarinawilloch/")
+  }else{
+    df_metrics <- CALC_METRICS(df_dose_response[[1]], df_dose_response[[2]], graph = FALSE)
+  }
+  
+  write_csv(df_metrics, filename)
+}
+
+enserink_breeze_input$dose <- enserink_breeze_input$dose*10^9
+enserink_breeze_input$response <-1 - enserink_breeze_input$y_true/100
+calc_dss(enserink_breeze_input, 'drug', 'dose', 'Patient.ID', 'response', '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_enserink_full_drug_set_testing.csv', viability = TRUE, graph = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Enserink")
+print(unique(enserink_breeze_input$Patient.ID[order(enserink_breeze_input$Patient.num)]))
+length(unique(enserink_breeze_input$Patient.ID[order(enserink_breeze_input$Patient.num)]))
+
+#----FIMM calculation----
+fimm_raw_response <- read.csv('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial cleansing/fimm_raw_dose_responses.csv.csv')
+
+fimm_raw_response$doseResponses <- fimm_raw_response$doseResponses/100
+df <- subset(fimm_raw_response, drug != 'TG100-115')
+calc_dss(df, 'drug', 'Final.Conc', 'sample', 'doseResponses', '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_fimm_full_drug_set.csv', graph = TRUE, viability = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM")
+
+
+beat_aml_raw_response <- read.csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/beat_aml_inhibitor_cleaned.csv')
+beat_aml_raw_response$avg2_response <- beat_aml_raw_response$avg2_response/100
+beat_aml_raw_response <- beat_aml_raw_response %>%
+  mutate(patient_id = paste(dbgap_subject_id, dbgap_dnaseq_sample,dbgap_rnaseq_sample, sep = "_")) %>% as.data.frame()
+
+calc_dss(beat_aml_raw_response, 'inhibitor', 'well_concentration', 'patient_id', 'avg2_response', '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_beat_aml_full_drug_set.csv', graph = TRUE, viability = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/BeatAML")
+
+
+#----Karolinska calculation ----
+karolinska_raw_response = read.csv('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial cleansing/karolinska_normalised_reponse_raw.csv')
+#karolinska_raw_response <- subset(karolinska_raw_response, DRUG_NAME != 'Trifluridine' & Patient.num != 'AML_007')
+#karolinska_raw_response <- subset(karolinska_raw_response, DRUG_NAME != 'Saracatinib' & Patient.num != 'AML_002' & sample == 'fresh')
+
+karolinska_raw_response$Normalised_reponse = 1 - karolinska_raw_response$Normalised_reponse/100
+calc_dss(subset(karolinska_raw_response, sample == 'fresh'), 'DRUG_NAME', 'CONCENTRATION', 'Patient.num', 'Normalised_reponse', '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_karolinska_full_drug_set_fresh.csv', graph = TRUE, viability = FALSE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska/fresh")
+calc_dss(subset(karolinska_raw_response, sample == 'frozen'), 'DRUG_NAME', 'CONCENTRATION', 'Patient.num', 'Normalised_reponse', '~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_karolinska_full_drug_set_frosen.csv', graph = TRUE, viability = FALSE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska/Frosen")
+
+subset(karolinska_raw_response, sample == 'fresh' & Patient.num == 'AML_001' & DRUG_NAME == '4-hydroxytamoxifen')
+
+#Calculating AUC scores
+Log10.DSS <- function(conc, resp){
+  resp = resp[order(conc)]
+  conc = conc[order(conc)]
+  conc = log10(conc)
+  
+  A = 0
+  for(j in 2:length(conc)){
+    a <- (resp[j]) *(conc[j]-conc[j-1])/(max(conc)-min(conc))
+    A = A + a
+    rm(a,j)
+  }
+  A
+}
+
+df.rAUC <- for_dss %>%
+  group_by(SCREEN_NAME, DRUG_NAME) %>%
+  summarise(AUC = Log10.DSS(CONCENTRATION_nM, CELL_VIABILITY)) %>%
+  as.data.frame()

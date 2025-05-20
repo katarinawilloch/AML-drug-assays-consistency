@@ -1,0 +1,296 @@
+# Install libraries ----
+library(readr)
+library("ggplot2")
+library(ggforce)
+library(dplyr)
+library(stringr)
+library(pheatmap)
+library(tidyr)
+library(reshape2)
+library(RColorBrewer)
+library(tidyverse)
+library(readxl)
+library(DataExplorer)
+library(Hmisc)
+library(htmltools)
+library(VennDiagram)
+library(grid)
+
+data_exploration <- function(df, output_loc, file_name){
+  summary_stats <- describe(df)
+  plot(summary_stats)
+  print(summary_stats)
+  df_long <- melt(is.na(df))
+  p <- ggplot(df_long, aes(x = Var2, y = Var1, fill = value)) +
+    geom_tile() +
+    scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "white")) +
+    labs(x = "Columns", y = "Rows", fill = "Missing") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  print(p)
+  report = create_report(df, output_dir = output_loc, output_file = file_name)
+}
+
+venn_diagram <- function(data1, data2, column1, column2, output_plot1, output_plot2){
+  # Calculate the intersection of values in the corresponding columns
+  intersection <- intersect(data1, data2)
+  # Create Venn diagram
+  diagram <- venn.diagram(
+    x = list(column1 = data1, column2 = data2),
+    category.names = c(column1, column2),
+    main = "Venn Diagram of Overlapping Rows",
+    sub = paste("Number of overlapping rows:", length(intersection)),
+    filename = output_plot1,  # Set filename to NULL to prevent saving to a file
+    output = FALSE
+  )
+  
+  
+  # Find overlapping and non-overlapping values
+  overlap <- intersect(data1, data2)
+  only_in_data1 <- setdiff(data1, data2)
+  only_in_data2 <- setdiff(data2, data1)
+  
+  # Create a table of overlapping and non-overlapping values
+  overlap_df <- data.frame(Value = overlap, In_both = rep("Yes", length(overlap)))
+  only_in_data1_df <- data.frame(Value = only_in_data1, In_both = rep("No (only in Data 1)", length(only_in_data1)))
+  only_in_data2_df <- data.frame(Value = only_in_data2, In_both = rep("No (only in Data 2)", length(only_in_data2)))
+  combined_df <- rbind(overlap_df, only_in_data1_df, only_in_data2_df)
+  combined_df <- combined_df[order(combined_df$Value), ]
+  print(combined_df)
+}
+
+# Creating box plot function ----
+box_plots <- function(df, col1, col2, fill = NULL, col3 = NaN, col4 = NaN, filename = NaN) {
+  df <- df[order(df[[fill]]), ] 
+  df[[col1]] <- factor(df[[col1]], levels = unique(df[[col1]]))
+  
+  # Create a box plot with colors based on combinations of categories
+  if (is.null(fill)) {
+    p <- ggplot(df, aes_string(x = col1, y = col2)) +
+      geom_boxplot() +
+      labs(title = paste("Box Plot of ", col2, " by ", col1), x = col1, y = col2) +
+      scale_x_discrete(breaks = unique(df[[col1]])[seq(1, length(unique(df[[col1]])), length.out = 5)]) +
+      expand_limits(y = c(min(df[[col2]]), max(df[[col2]]))) +
+      theme(axis.text = element_text(size = 14))
+  } else {
+    p <- ggplot(df, aes_string(x = col1, y = col2, fill = fill)) +
+      geom_boxplot() +
+      labs(title = paste("Box Plot of ", col2, " by ", col1), x = col1, y = col2) +
+      scale_x_discrete(breaks = unique(df[[col1]])[seq(1, length(unique(df[[col1]])), length.out = 5)]) +
+      expand_limits(y = c(min(df[[col2]]), max(df[[col2]]))) +
+      theme(axis.text = element_text(size = 14))
+  }
+  
+  df_max <- df[which(df[[col2]] == tapply(df[[col2]], df[[col1]], max)[df[[col1]]]), ]
+  
+  if (!is.nan(col3) & !is.nan(col4)) {
+    labels <- ifelse(!is.nan(df_max[[col4]]), paste0(df_max[[col3]], " ", df_max[[col4]]), as.character(df_max[[col3]]))
+    p <- p + geom_text(data = df_max, aes(label = labels), vjust = -1)
+  } else if (!is.nan(col3)) {
+    p <- p + geom_text(data = df_max, aes_string(label = col3), vjust = -1)
+  } else if (!is.nan(col4)) {
+    p <- p + geom_text(data = df_max, aes_string(label = col4), vjust = -1)
+  }
+  
+  if (!is.nan(filename)) {
+    ggsave(filename, plot = p + theme(axis.text = element_text(size = 24),   # Adjust axis text size
+                                      axis.title = element_text(size = 24),  # Adjust axis title size
+                                      plot.title = element_text(size = 30)), width = 60, height = 50, units = "cm", dpi = 300)
+  }
+  
+  return(p)
+}
+
+
+violin_plots <- function(df, col1, col2, fill = NULL, col3 = NaN, col4 = NaN, filename = NaN){
+  df <- df[order(df[[fill]]), ]
+  df[[col1]] <- factor(df[[col1]], levels = unique(df[[col1]]))
+  
+  # Create a violin plot with colors based on combinations of categories
+  if (is.null(fill)) {
+    p <- ggplot(df, aes_string(x = col1, y = col2)) +
+      geom_violin() +
+      geom_jitter(width=0.15, alpha=0.5) +
+      labs(title = paste("Box Plot of ", col2, " by ", col1), x = col1, y = col2) +
+      scale_x_discrete(breaks = unique(df[[col1]])[seq(1, length(unique(df[[col1]])), length.out = 5)]) +
+      expand_limits(y = c(min(df[[col2]]), max(df[[col2]]))) 
+  } else {
+    p <- ggplot(df, aes_string(x = col1, y = col2, fill = fill)) +
+      geom_violin() +
+      geom_jitter(width=0.15, alpha=0.5) +
+      labs(title = paste("Box Plot of ", col2, " by ", col1), x = col1, y = col2) +
+      scale_x_discrete(breaks = unique(df[[col1]])[seq(1, length(unique(df[[col1]])), length.out = 5)]) +
+      expand_limits(y = c(min(df[[col2]]), max(df[[col2]]))) 
+  }
+  
+  df_max <- df[which(df[[col2]] == tapply(df[[col2]], df[[col1]], max)[df[[col1]]]), ]
+  
+  if (!is.nan(col3) & !is.nan(col4)) {
+    labels <- ifelse(!is.nan(df_max[[col4]]), paste0(df_max[[col3]], " ", df_max[[col4]]), as.character(df_max[[col3]]))
+    p <- p + geom_text(data = df_max, aes(label = labels), vjust = -1)
+  } else if (!is.nan(col3)) {
+    p <- p + geom_text(data = df_max, aes_string(label = col3), vjust = -1)
+  } else if (!is.nan(col4)) {
+    p <- p + geom_text(data = df_max, aes_string(label = col4), vjust = -1)
+  }
+  
+  if (!is.nan(filename)) {
+    ggsave(filename, plot = p+ theme(axis.text = element_text(size = 24),   # Adjust axis text size
+                                     axis.title = element_text(size = 24),  # Adjust axis title size
+                                     plot.title = element_text(size = 30)), width = 60, height = 60, units = "cm")
+  }
+  
+  return(p)
+}
+
+
+dot_plots <- function(df, col1, col2, groups = NULL,thresholds=NULL, filename = NULL) {
+  # Create a box plot with colors based on combinations of categories
+  if (is.null(fill)) {
+    p <- ggplot(df, aes_string(x = col1, y = col2, shape = groups)) +
+      geom_point() +
+      labs(title = paste("Dot Plot of ", col2, " by ", col1), x = col1, y = col2) +
+      expand_limits(y = c(min(df[[col2]]), max(df[[col2]]))) +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  } else {
+    p <- ggplot(df, aes_string(x = col1, y = col2, shape = groups)) +
+      geom_point() +
+      labs(title = paste("Dot Plot of ", col2, " by ", col1), x = col1, y = col2) +
+      expand_limits(y = c(min(df[[col2]]), max(df[[col2]]))) +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  }
+  
+  # Add threshold lines and assign colors
+  if (!is.null(thresholds)) {
+    num_thresholds <- length(thresholds)
+    color_palette <- colorRampPalette(c("red", "blue"))(num_thresholds)
+    
+    for (i in 1:num_thresholds) {
+      p <- p + geom_hline(yintercept = thresholds[i], linetype = "dashed", color = color_palette[i])
+    }
+  }
+  
+  if (!is.nan(filename)) {
+    ggsave(filename, plot = p, width = 20, height = 20, units = "cm")
+  }
+  
+  return(p)
+}
+
+#Pie plot ----
+pie_plots <- function(df, group_var, filename) {
+  category_counts <- df %>%
+    count({{ group_var }}) %>%
+    mutate(percent = freq / sum(freq) * 100)
+  
+  print(category_counts)
+  
+  pie_chart <- ggplot(category_counts, aes(x="", y = freq, fill = !!as.name(names(category_counts)[1]))) +
+    geom_col() +
+    coord_polar(theta = "y", start=0) + 
+    theme_void() +
+    labs(title = paste("Category Counts for ", group_var)) +
+    geom_text(aes(label = paste0(round(percent, 1), '%')), position = position_stack(vjust = 0.5))+
+    scale_fill_brewer(palette = 'Spectral')
+  
+  print(pie_chart)
+  ggsave(filename, plot=pie_chart)
+  
+}
+
+
+make_bold_names <- function(mat, rc_fun, row=TRUE) {
+  bold_names <- rc_fun(mat)
+  ids <- rownames(mat) %>% match(rc_fun(mat))
+  if(row == FALSE){
+    ids <- colnames(mat) %>% match(rc_fun(mat))
+  }
+  ids %>%
+    walk(
+      function(i)
+        bold_names[i] <<-
+        bquote(bold(.(rc_fun(mat)[i]))) %>%
+        as.expression()
+    )
+  bold_names
+}
+
+#Heatmap plot function ----
+heatmap_plots <- function(df, a_col, a_row = NaN, filename,a_color = list(
+  IGHV = c("NOT MUTATED" = "#6095a0", "MUTATED" = "#E55642"),
+  CH11QDLC = c("ABNORMAL" = "#F4A582", "NORMAL" = "#92C5DE"),
+  CH12TRIC = c("ABNORMAL" = "#F4A582", "NORMAL" = "#92C5DE"),
+  CH13QDEL = c("ABNORMAL" = "#F4A582", "NORMAL" = "#92C5DE"),
+  CH17PDLC = c("ABNORMAL" = "#F4A582", "NORMAL" = "#92C5DE"),
+  MRDSTAT_BONE_MARROW = c("NEGATIVE" = "#9e82ed", "INTERMEDIATE"="#e89829", "POSITIVE" = "#466D1D"), 
+  MRDSTAT_BLOOD = c("NEGATIVE" = "#9e82ed", "INTERMEDIATE"="#e89829", "POSITIVE" = "#466D1D"))) {
+  fontsize_row = nrow(df) / 7
+  if (any(!is.na(a_row))) {
+    # Create heatmap
+    h <- pheatmap(
+      df,
+      annotation_row = a_row,
+      annotation_col = a_col,
+      #color = hcl.colors(50, "BluYl"),
+      #color = colorRampPalette(brewer.pal(3, "RdBu"))(256), # Define color range
+      na_color = "grey",  # Set color for NA values
+      annotation_colors = a_color,
+      labels_row = make_bold_names(df, rownames, TRUE),
+      labels_col = make_bold_names(df, colnames, FALSE),
+      fontsize_row=fontsize_row,
+      fontsize_col=fontsize_row,
+      cutree_rows = 3,
+      cutree_cols = 3
+    )
+    if (!is.na(filename)) {
+      ggsave(filename, plot = h, width = 50, height = nrow(df)/2, units = "cm")
+    }
+    return(h)
+  } else {
+    # Create heatmap
+    h <- pheatmap(
+      df,
+      #annotation_row = a_row,
+      annotation_col = a_col,
+      #color = hcl.colors(50, "BluYl"),
+      #color = colorRampPalette(brewer.pal(3, "RdBu"))(256), # Define color range
+      na_color = "grey",  # Set color for NA values
+      annotation_colors = a_color,
+      labels_row = make_bold_names(df, rownames, TRUE),
+      labels_col = make_bold_names(df, colnames, FALSE),
+      fontsize_row=fontsize_row,
+      fontsize_col=fontsize_row,
+      cutree_rows = 3,
+      cutree_cols = 3
+    )
+    if (!is.nan(filename)) {
+      ggsave(filename, plot = h, width = 50, height = nrow(df)/2, units = "cm")
+    }
+    return(h)
+  }
+}
+
+#pca plots function ----
+pca_plots <- function(df, title = "PCA Plot", file_loc){
+  print(df[['usubjid']])
+  # Perform PCA excluding specific columns
+  pca_result <- prcomp(df[, !names(df) %in% c('usubjid', 'batch')], scale. = TRUE)
+  
+  # Extract PC scores
+  pc_scores <- as.data.frame(pca_result$x[, 1:2])  # Using only the first two principal components
+  
+  # Combine PC scores with color information
+  pca_data <- cbind(pc_scores, batch = df$batch)
+  print(pca_data)
+  pca_data <- cbind(pca_data, usubjid = df$usubjid)
+  
+  # Plot PCA
+  p <- ggplot(pca_data, aes(x = PC1, y = PC2, color = batch, label = usubjid)) +
+    geom_point() +
+    geom_text(nudge_x = 0.2, nudge_y = 0.2, size = 3) +
+    labs(title = title)
+  
+  ggsave(plot = p, filename = file_loc)
+  return(p)
+}
+

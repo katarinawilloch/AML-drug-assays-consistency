@@ -1,0 +1,20 @@
+library(knitr)
+library(gt)
+
+df <- read_csv('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/experimental_variables.csv')
+
+
+# Create the table with specified dimensions and text size
+kable(df, 
+      format = "html", 
+      table.attr = 'style="width: 25cm; height: 1.63cm; font-size: 12px;"')
+
+df %>%
+  gt() %>%
+  tab_options(
+    table.width = px(25 * 28.35),  # Convert cm to px (approx. 28.35px per cm)
+    table.height = px(1.63 * 28.35),
+    heading.title.font.size = 12,
+    heading.subtitle.font.size = 12,
+    row.font.size = 12
+  )

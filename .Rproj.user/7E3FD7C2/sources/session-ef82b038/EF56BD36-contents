@@ -1,0 +1,945 @@
+
+visualize = function(object, plot=c("all", "residuals", "model"),formula=NULL,...){
+  UseMethod("visualize")
+}
+
+visualize.default = function(object, plot=c("all", "residuals", "model"),formula=NULL,...){
+  
+  ## get dataset name
+  data = eval(getCall(object)$data)
+  
+  ## get formula
+  variables = all.vars(formula(object))
+  predictors = variables[-1]
+  response = variables[1]
+  new_form = flexplot::make_flexplot_formula(predictors, response, data)
+  
+  ## call compare.fits
+  compare.fits(new_form, data=data, model1=object)
+  
+}
+
+
+#' Visualize a randomForest model 
+#'
+#' Visualize a randomForest model
+#' @param object a randomForest object
+#' @param plot what should be plotted? Residuals? model plot? All of them?
+#' @param formula A flexplot-style formula
+#' @param ... Other arguments passed to flexplot
+#' @return a plot containing a visual of the chosen model
+#' @export
+visualize.randomForest = function(object, plot=c("all", "residuals", "model"),formula=NULL,...){
+  
+  ## get dataset name
+  data = eval(getCall(object)$data)
+  
+  ## get formula
+  variables = all.vars(formula(object))
+  predictors = variables[-1]
+  response = variables[1]
+  new_form = make_flexplot_formula(predictors, response, data)
+  
+  ## call compare.fits
+  compare.fits(new_form, data=data, model1=object,...)
+  
+}
+
+
+
+#' Visualize a fitted RandomForest model 
+#'
+#' Visualize a RandomForest model
+#' @param object a RandomForest object
+#' @param plot what should be plotted? Residuals? model plot? All of them?
+#' @param formula A flexplot-style formula
+#' @param ... Other arguments passed to flexplot
+#' @return a plot containing a visual of the chosen model
+#' @export
+visualize.RandomForest = function(object, plot=c("all", "residuals", "model"),formula=NULL,...) {
+  all_terms = get_terms(object)
+  response = attr(object, "data")@get("response")
+  outcome = attr(object, "data")@get("input")
+  data = cbind(response, outcome)
+  if (is.null(formula)) formula = make_flexplot_formula(all_terms$predictors, all_terms$response, data)
+  compare.fits(formula, data=data, model1=object,...)
+}
+
+
+
+
+
+#' Visualize a fitted model 
+#'
+#' Visualize a fitted model
+#' @param object a lm object
+#' @param plot what should be plotted? Residuals? Model plot? All of them?
+#' @param formula A flexplot-style formula
+#' @param plots.as.list Should the plots be returned as a list? Defaults to FALSE. 
+#' @param ... Other arguments passed to flexplot
+#' @return a plot containing a visual of the chosen model
+#' @export
+visualize.lm = function(object, plot=c("all", "residuals", "model"), formula = NULL, plots.as.list=FALSE,...){
+  
+  plot = match.arg(plot, c("all", "residuals", "model"))
+  
+  d = object$model
+  data = object$model
+  variables = all.vars(formula(object))
+  outcome = variables[1]
+  predictors = variables[-1]
+  
+  ## see if all predictors are categorical
+  dv_is_factor = check.non.number(data[,outcome])
+  all_ivs_factors = all(variable_types(predictors, data)$characters)
+  if (dv_is_factor & all_ivs_factors) {
+    stop("Well, darn. You've found a limitation of flexplot. Flexplot cannot use visualize when
+         all your variables are categorical. Sorry!")
+  }
+  
+  #### use flexplot to visualize a model
+  if ((plot=="all" | plot == "model" ) & is.null(formula)){
+    
+    #### generate formula as best we can
+    #### get dataset
+    
+    #### now decide where things go
+    if (length(predictors)>4){
+      message("Note: to visualize more than four variables, I'm going to do an 'added variable plot.'")
+      
+      f = object$call[[2]]
+      step3 = added.plot(f, data=d, ...) + labs(title="Analysis Plot")
+      class(step3) <- c("flexplot", class(step3))
+      return(step3)
+    } else {
+      
+      
+      f = make_flexplot_formula(predictors, outcome, data)
+      step3 = compare.fits(f, data=data, model1=object, ...) + labs(title="Analysis Plot")
+      
+      #class(step3) <- c("flexplot", class(step3))
+      #return(step3)			
+      ### if they have more than two variables, also include a added variable plot
+      if (length(terms)>1){
+        step3b = added.plot(f, data=d,...)+ labs(title="Added Variable Plot")
+        step3 = cowplot::plot_grid(step3, step3b, rel_widths=c(.6, .4))
+        #class(step3) <- c("flexplot", class(step3))
+        #return(step3)				
+      }
+    }
+    
+  } else if (plot=="all" | plot=="model"){
+    step3 = compare.fits(formula, data=data, model1=object, ...) + labs(title="Analysis Plot")
+    ### if they have more than two variables, also include a added variable plot
+    if (length(terms)>1){
+      step3b = added.plot(f, data=d,...)+ labs(title="Added Variable Plot")
+      step3 = cowplot::plot_grid(step3, step3b, rel_widths=c(.6, .4))			
+    }		
+    
+  }
+  
+  if (plot=="residuals"){
+    res.plots = residual.plots(d, object,...)
+    p = arrange.plot(histo=res.plots$histo, res.dep=res.plots$res.dep, sl=res.plots$sl, step3=NULL,plot=plot, terms=res.plots$terms, numbers=res.plots$numbers)
+    if (plots.as.list){
+      list(histo=res.plots$histo, res.dep=res.plots$res.dep, sl=res.plots$sl)
+    } else {
+      return(p)
+    }
+  } else if (plot=="model"){
+    return(step3)
+  } else {
+    res.plots = residual.plots(d, object)
+    p = arrange.plot(res.plots$histo, res.plots$res.dep, res.plots$sl, step3, plot, res.plots$terms, res.plots$numbers)
+    return(p)
+  }
+}
+
+
+#utils::globalVariables(c("model", "Value", "y", "dataset", "switch_orientation"))
+
+
+
+
+
+#' Visualize a fitted glmerMod model 
+#'
+#' Visualize a fitted glmerMod model
+#' @param object a glmer object
+#' @param plot what should be plotted? Residuals? Model plot? All of them?
+#' @param ... Other arguments passed to flexplot
+#' @param formula A flexplot-style formula
+#' @param sample The number of individuals' datapoints to sample as raw data. Defaults to 3
+#' @param plots.as.list Should the plots be returned as a list? Defaults to FALSE. 
+#' @rawNamespace import(dplyr, except = c(filter, lag))
+#' @return a plot containing a visual of the chosen model
+#' @export
+visualize.glmerMod = function(object, plot=c("all", "residuals", "model"), formula=NULL, 
+                              sample = 3, plots.as.list=FALSE,...){
+  
+  #### figure out what is numeric
+  d = object@frame
+  plot = match.arg(plot, c("all", "residuals", "model"))
+  
+  #### generate residuals plots
+  res.plots = residual.plots(data=d, object)
+  
+  #### now generate a model plot
+  levels = apply(d, 2, FUN=function(x) length(unique(x)))
+  outcome = names(d)[1]
+  
+  #### extract formula
+  form = as.character(formula(object))[3]
+  
+  #### identify random effects
+  term.re = trimws(substr(form, regexpr("\\|", form)[1]+1, regexpr("\\)", form)[1]-1))		
+  
+  #### find remaining terms
+  preds = names(d)[-1]#[which(!(names(d)[-1] %in% term.re))]
+  
+  #### randomly sample the re terms and convert to numeric
+  
+  samp = sample(unique(d[, term.re]), size=sample)
+  k = d[d[,term.re]%in%samp,]; k[,term.re] = as.factor(k[,term.re])
+  
+  ### come up with formula
+  if (is.null(formula)){
+    slots = c(1,3,4)
+    form.slots = rep(NA, times=4)
+    for (i in 1:min(4,length(preds))){
+      if (preds[i]!=term.re){
+        form.slots[slots[i]] = preds[i]
+      }
+    }
+    
+    ### for random effects models, just put school in first slot
+    if (length(preds)>1) {
+      form.slots[2] = term.re
+    } else {
+      form.slots[1] = term.re
+    }
+    symbol.slots = c("~","+", "|", "+")
+    formula = paste0(symbol.slots, form.slots, collapse="")
+    formula = gsub("\\|NA", "", formula);formula = gsub("\\+NA", "", formula);
+    formula = paste0(outcome, formula, collapse="")
+    
+    formula = formula(formula)
+  } 
+  
+  ### figure out where random component is
+  f.char = as.character(formula)[3]
+  criteria = paste0("\\+.*", term.re)
+  
+  ### if random component is in slot 2, modify the formula
+  if (length(grep(criteria, f.char))>0){
+    modify=T
+    
+    ### if there's a | in the formula, put it back
+    crit2 = paste0("\\+.*", term.re,".*\\|")
+    if (length(grep(crit2, f.char))>0){
+      termses = gsub(crit2, "|", f.char)  
+    } else {
+      termses = gsub(criteria, "", f.char)
+    }
+    
+    formula.new = make.formula(outcome, termses)			
+  } else {
+    modify = F
+  }
+  
+  
+  terms = all.vars(formula)[-1]
+  terms.fixed = terms[-which(terms %in% term.re)]
+  
+  
+  ##### generate fixed effects predictions
+  #### if random is in NOT in the second slot
+  if (!modify){
+    step3 = compare.fits(formula, data=k, model1=object, model2=object, re=T, ...)
+  } else {
+    #### otherwise...
+    
+    prediction = compare.fits(formula, data=k, model1=object, re=T, return.preds=T)	
+    
+    ### to prevent conflicts with base::filter
+    newd = prediction[prediction$model=="random effects",]; names(newd)[names(newd)=="prediction"] = outcome
+    #newd = prediction %>% dplyr::filter(model=="random effects") %>% dplyr::mutate(MathAch = prediction)			
+    #formula_new = MathAch~SES + School | Sex
+    step3 = flexplot(formula, data=k, suppress_smooth=T, ...) 
+    
+    
+    #if axis 1 is numeric, do lines
+    if (is.numeric(d[,terms[1]])){
+      m = prediction[prediction$model=="fixed effects",]
+      
+      ### flexplot turns <5 unique numeric values to ordinal variable
+      ### we need to do the same here
+      if (is.numeric(m[,terms[1]]) & length(unique(m[,terms[1]]))<5){
+        m[,terms[1]] = factor(m[,terms[1]], ordered=TRUE)
+        newd[,terms[1]] = factor(newd[,terms[1]], ordered=TRUE)
+      }	
+      
+      step3 = step3 + 
+        # Fixed effects: smaller average line
+        geom_line(data=m, 
+                  aes_string(terms[1], "prediction", color=NA, group=1), 
+                  linetype=1, lwd=1, col="black") +  # Smaller line width for average
+        
+        # Random effects: larger colored lines
+        geom_line(data=newd, 
+                  aes_string(terms[1], outcome, group=term.re, color=term.re), 
+                  lwd=3)  # Larger line width for random effects
+      
+      
+      #if axis 1 is categorical, plot means as dots
+    } else {
+      
+      #### see if any variables are binned, then bin the same variables
+      ggdata = step3$data
+      binned.var = names(ggdata)[grep("_binned",names(step3$data))] 
+      unbinned.var = binned = gsub("_binned", "", binned.var)
+      
+      if (length(binned)>0){
+        ### use ggplots data to find num bins and levels
+        bin.levels = levels(step3$data[,binned.var])
+        labs = levels(ggdata[,binned.var])			
+        bins = length(labs)	
+        newd[,binned] = bin.me(variable=binned, data=newd, bins=bins, labels=labs, breaks=NULL, check.breaks=F)				
+        prediction[,binned] = bin.me(variable=binned, data= prediction, bins=bins, labels=labs, breaks=NULL, check.breaks=F)				
+      }			
+      
+      #### aggregate the means across variables		
+      means = prediction %>% group_by_at(vars(one_of(c(terms, "model")))) %>% summarize(Value = mean(prediction))
+      fixed.means = means[means$model=="fixed effects",]
+      fixed.means = fixed.means %>% dplyr::group_by_at(vars(one_of(c(terms.fixed)))) %>% 
+        summarize(Value=mean(Value))
+      
+      means = means[means$model=="random effects",]
+      #means = means %>% dplyr::filter(model=="random effects") 
+      names(means)[ncol(means)] = names(fixed.means)[ncol(fixed.means)] = outcome
+      names(fixed.means)[names(fixed.means)==unbinned.var] = binned.var
+      names(means)[names(means)==unbinned.var] = binned.var			
+      #if (term.re %in% names(fixed.means)) 
+      fixed.means[,term.re] = NA
+      fixed.means[,term.re] = factor(fixed.means[,term.re], levels=levels(means[,term.re]))
+      #head(fixed.means)
+      #### plot it
+      step3 = step3 + 
+        ### fixed effects
+        geom_point(data=fixed.means, aes_string(x=terms[1], y=outcome), size=3, color="black", shape=16) +
+        geom_line(data=fixed.means, aes_string(x=terms[1], y=outcome, group=1), lwd=2, color="black", linetype=1) +
+        
+        ### random effects
+        geom_point(data=means, aes_string(x=terms[1], y=outcome), size=.5) +
+        geom_line(data=means, aes_string(x=terms[1], y=outcome, group=term.re), lwd=.5, linetype=2) 			
+      
+    }	
+    
+    #### remove legend if n>10
+    if (sample>10){
+      step3 = step3 + theme(legend.position="none")
+    }	
+    
+  }
+  
+  
+  #### now put them all together
+  if (plot=="residuals"){
+    p = arrange.plot(histo=res.plots$histo, res.dep=res.plots$res.dep, sl=res.plots$sl, step3=NULL,plot=plot, terms=res.plots$terms, numbers=res.plots$numbers)
+    if (plots.as.list){
+      list(histo=res.plots$histo, res.dep=res.plots$res.dep, sl=res.plots$sl)
+    } else {
+      return(p)
+    }
+  } else if (plot=="model"){
+    return(step3)
+  } else {
+    p = arrange.plot(res.plots$histo, res.plots$res.dep, res.plots$sl, step3, plot, res.plots$terms, res.plots$numbers)
+    return(p)
+  }	
+  
+}
+
+arrange.plot  = function(histo, res.dep, sl, step3, plot, terms, numbers){
+  
+  # change default size of plots
+  histo = histo +  theme(plot.title = element_text(size = 14))
+  res.dep = res.dep +  theme(plot.title = element_text(size = 14))
+  sl = sl +  theme(plot.title = element_text(size = 14))
+  
+  #### return the plots
+  if (plot=="model"){
+    plot = step3
+  } else if (plot=="residuals"){
+    if (length(numbers)>0){
+      top.row =suppressMessages(cowplot::plot_grid(histo, res.dep,ncol=2))
+      bottom.row =suppressMessages(cowplot::plot_grid(NULL, sl, NULL, ncol=3, rel_widths=c(.25, .5, .25)))
+      plot = suppressMessages(cowplot::plot_grid(top.row, bottom.row, nrow=2))			
+    } else {
+      plot = suppressMessages(cowplot::plot_grid(histo, sl, ncol=1))
+      class(plot) <- c("flexplot", class(plot))			
+    }
+  } else {
+    if (length(terms)==1){
+      if (length(numbers)>0){
+        top.row = suppressMessages(cowplot::plot_grid(step3, histo))
+        bottom.row = suppressMessages(cowplot::plot_grid(res.dep, sl, ncol=2))
+        heights = c(.5, .5)
+      } else {
+        top.row = suppressMessages(cowplot::plot_grid(NULL, step3, NULL, ncol=3, rel_widths=c(.25, .5, .25)))
+        bottom.row = suppressMessages(cowplot::plot_grid(histo, sl, ncol=2))
+        heights = c(.6, .4)
+      }
+      
+    } else {
+      if (length(numbers)>0){
+        top.row = step3
+        bottom.row = suppressMessages(cowplot::plot_grid(histo, res.dep, sl, ncol=3))
+        heights = c(.7, .3)				
+      } else {
+        top.row = step3
+        bottom.row = suppressMessages(cowplot::plot_grid(histo, sl, ncol=2))
+        heights = c(.7, .3)								
+      }
+    }	
+    plot = suppressMessages(cowplot::plot_grid(top.row, bottom.row, nrow=2, rel_heights=heights))
+  }	
+  
+  class(plot) <- c("flexplot", class(plot))
+  return(plot)
+}
+
+
+### this function just produces residual plots, so I can reuse it between methods
+
+residual.plots = function(data, object,...){
+  
+  terms = attr(terms(object), "term.labels")
+  
+  #### remove interaction and polynomial terms from "terms"
+  terms = remove_nonlinear_terms(terms)
+  
+  
+  #### identify factors
+  if (length(terms)>1){
+    factors = names(which(unlist(lapply(data[,terms], is.factor))));
+    numbers = names(which(unlist(lapply(data[,terms], is.numeric))));
+  } else {
+    factors = terms[which(is.factor(data[,terms]) | is.character(data[,terms]))]
+    numbers = terms[which(is.numeric(data[,terms]))]
+  }
+  #
+  #### figure out what is numeric
+  levels = apply(data, 2, FUN=function(x) length(unique(x)))
+  #### if there's too few levels and it's not categorical
+  factors = !sapply(data, function(x) is.factor(x) | is.character(x))
+  if (any(levels<5 & factors)){
+    message("Note: one or more of your variables has less than 5 values, yet they're treated as numeric.\n\n")
+  }
+  
+  #### extract names
+  x.names = names(data)[-1] 
+  y.name = names(data)[1]
+  
+  #### export residuals
+  data$residuals = residuals(object)
+  data$abs.res = abs(data$residuals)
+  data$fitted = fitted(object)
+  
+  #### plot residuals
+  levels = length(unique(round(data[,"residuals"], digits=2)))	
+  data$fitted = round(data$fitted, digits=2)	
+  
+  histo = ggplot2::ggplot(data=data, aes(x=residuals)) + 
+    geom_histogram(fill='lightgray', col='black', bins=min(30, round(levels/2))) +
+    theme_bw() + theme(text=element_text(size=14)) +
+    labs(x="Residuals", y = "Count", title="Histogram of Residuals")
+  class(histo) = c("flexplot", class(histo))
+  if (length(numbers)>0){
+    #res.dep = ggplot2::ggplot(data=d, aes(x=fitted, y=residuals)) + geom_point() + geom_smooth(method="loess", se=F) + 
+    #theme_bw() + labs(x="Fitted", y="Residuals", title="Residual Dependence Plot")
+    res.dep = flexplot(residuals~fitted, data=data,...) + 
+      labs(x="Fitted", y="Residuals", title="Residual Dependence Plot")
+    class(res.dep) = c("flexplot", class(res.dep))		
+    
+  } else {
+    res.dep = NULL
+  }
+  
+  if (length(unique(data$fitted))<7){
+    
+    sl = flexplot(abs.res~fitted, data=data, method="lm",...) + 
+      labs(x="fitted", y="Absolute Value of Residuals", title="S-L Plot")	
+    nd = aggregate(abs.res~fitted, data=data, FUN=median)
+    # this is necessary bc ggplot converts to ordered factor when there's few levels
+    if (is.ordered(sl$data$fitted)) nd[,1] = factor(nd[,1], ordered=T)
+    
+    sl = sl + geom_line(data=nd, col="#bf0303", size=1.5, group=1)
+    #class(sl) = c("flexplot", class(sl))		
+  } else {
+    sl = flexplot(abs.res~fitted, data=data, method="lm",...)+ labs(x="fitted", y="Absolute Value\nof Residuals", title="S-L Plot")			
+    class(sl) = c("flexplot", class(sl))					
+  }
+  
+  
+  
+  
+  plots = list(histo=histo, res.dep=res.dep, sl=sl, terms=terms, factors=factors, numbers=numbers)
+  return(plots)
+  #class(plot) <- c("flexplot", class(plot))
+  #return(plot)
+}
+
+
+
+add_bin_to_new_dataset = function(plot, d, terms, term.re, outcomevar) {
+  
+  # variable isn't binned/summarized!
+  are_any_binned = grep("_binned", names(plot$data))
+  if (length(are_any_binned)==0) return(d)
+  
+  # figure out which is binned
+  binned_var = names(plot$data)[are_any_binned]
+  variable_to_be_binned = gsub("_binned", "", binned_var)
+  gg_dataset = plot$data
+  
+  
+  extract_numbers_from_binned_var(x_bin=gg_dataset[,binned_var[1]], 
+                                  x_original = d[,variable_to_be_binned[1]])
+  # extract breakpoints from plot data, then break the new one
+  d_to_binned = 1:length(variable_to_be_binned) %>% 
+    purrr::map(function(x) extract_numbers_from_binned_var(gg_dataset[,binned_var[x]], d[,variable_to_be_binned[x]])) %>%
+    data.frame 
+  names(d_to_binned) = binned_var
+  
+  if (nrow(d_to_binned)==0) return(d)
+  d[,binned_var] = d_to_binned[,binned_var]
+  # create a new string of terms that needs to be summarized by
+  nt = c(terms[-which(terms %in% variable_to_be_binned)], binned_var)
+  
+  # remove extra REs because we don't need any of them,e xcept ggplot requires a column name for it
+  if ("model" %in% names(d)) d[[term.re]] = factor(d[[term.re]]) else d[[term.re]] = d[[term.re]][1] %>% factor(d[[term.re]][1]) 
+  d = d %>% 
+    group_by_at(nt) %>% 
+    summarize(!!rlang::sym(outcomevar) := mean(!!(rlang::sym(outcomevar))))
+  return(d)
+}
+
+extract_numbers_from_binned_var = function(x_bin, x_original) {
+  
+  # regex to extract the breaks
+  regex_cmd_one = gsub("([(]?-?[0-9]*.?[0-9]*[e]?-?[0-9]*[)]?)-([(]?-?[0-9]*.?[0-9]*[e]?-?[0-9]*[)]?)", "\\1", x_bin)
+  regex_cmd_two = gsub("([(]?-?[0-9]*.?[0-9]*[e]?-?[0-9]*[)]?)-([(]?-?[0-9]*.?[0-9]*[e]?-?[0-9]*[)]?)", "\\2", x_bin)
+  regex_cmd = c(regex_cmd_one, regex_cmd_two)
+  regex_cmd = gsub("[)]", "", gsub("[(]", "", regex_cmd))
+  break_vals = sort(as.numeric(unique(regex_cmd)))
+  
+  which_too_high = x_original>max(break_vals)
+  x_original[which_too_high] = max(break_vals)-.0001
+  which_too_low = x_original<min(break_vals)
+  x_original[which_too_low] = min(break_vals)+.0001  
+  x_original = data.frame(x_original)
+  names(x_original)[1] = "x_original"
+  # replace observations > max with the max
+  x_original = bin.me("x_original", x_original, breaks=break_vals)
+  return(x_original)
+}
+
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+## function to generate predicted differences, standardized
+standardized_differences = function(model1, model2, sigma=TRUE){
+  
+  ### check for nested functions
+  nested = check_nested(model1, model2)
+  
+  ### handle missing data from one model to the next
+  new_models = check_model_rows(model1, model2, nested)
+  model1 = new_models[[1]]; model2 = new_models[[2]]  
+  
+  # make sure the two models have the same DV
+  dv1 = extract_data_from_fitted_object(model1)[,1]
+  dv2 = extract_data_from_fitted_object(model2)[,1]
+  
+  if (all(dv1 != dv2)) {
+    stop("It looks like you're trying to compare two models with different outcome variables.")
+  }
+  
+  pred1 = predict(model1, type="response")
+  pred2 = predict(model2, type="response")
+  differences = round(
+    (quantile(abs(predict(model1, type="response") - 
+                    predict(model2, type="response")))), digits=3)
+  differences
+}
+
+#### make a custom labeller that removes "_binned"
+custom.labeler = function(x){
+  lapply(names(x),function(y){
+    paste0(gsub("_binned", "", y),":\n", x[[y]])
+  })
+}
+
+#### make sure all variables are in data
+check_all_variables_exist_in_data = function(variables, data) {
+  
+  if (is.null(variables)) return(NULL)
+  
+  missing.preds = variables[which(!(variables %in% names(data)))]
+  if (length(missing.preds)>0){
+    stop(paste0("One or more of your predictor variables: ", paste0(missing.preds, collapse=","), " are missing. Did you specify the right dataset and spell the variables correctly?"))
+  }
+  return(NULL)
+}  
+
+extract_data_from_fitted_object = function(object) {
+  if (class(object)[1]=="lm" | class(object)[1]=="glm" | class(object)[1] == "rlm") return(object$model)
+  if (class(object)[1]=="RandomForest") {
+    outcome = object@responses@variables
+    predictors = object@data@get("input")
+    data = cbind(outcome, predictors)
+    return(data)
+  }  
+  if (class(object)[1] == "randomForest.formula") {
+    vars = all.vars(formula(object))
+    data = eval(getCall(object)$data)
+    return(data[,vars])
+  }
+  
+  if (class(object)[1] == "lmerMod") {
+    data = model.frame(object)
+    return(data)
+  }
+  # this should work for the rest?? But it won't be in the right order!
+  return(eval(getCall(object)$data))
+}
+
+check_nested = function(model1, model2) {
+  #### collect terms
+  mod1 = get_predictors(model1)
+  mod2 = get_predictors(model2)
+  
+  #### check for nested models
+  if (all(length(mod1)> length(mod2) & (mod2 %in% mod1) & (class(model1)[1] == class(model2)[1]))) return(T)
+  if (all(length(mod2)>=length(mod1) & (mod1 %in% mod2) & (class(model1)[1] == class(model2)[1]))) return(T)
+  return(F)
+}
+
+get_predictors = function(model) {
+  
+  # try to get the terms and see if it fails
+  mod1 = try({attr(terms(model), "term.labels")}, silent=TRUE)
+  
+  # no failure = return
+  if (class(mod1)!="try-error") return(unlist(mod1))
+  
+  # now try another way (this will get randomForest)
+  mod = try({getCall(model)$formula}, silent=TRUE)
+  
+  # no failure = return
+  if (class(mod)!="try-error") return(all.vars(mod)[-1])
+  
+  # now deal with cases where there is a failure
+  if (class(model)[1]=="RandomForest") {
+    return(all.vars(model@data@formula$input))
+  }
+}
+
+## function that does nested model comparisons on a single fitted model
+nested_model_comparisons = function(object){
+  
+  ### extract necessary terms
+  terms = attr(terms(object), "term.labels")
+  
+  ### temporary function that updates model
+  removed.one.at.a.time = function(i, terms, object){
+    new.f = as.formula(paste0(". ~ . -", terms[i]))
+    new.object = update(object, new.f)
+    list(
+      rsq = summary(object)$r.squared - summary(new.object)$r.squared,
+      bayes.factor = bf.bic(object, new.object, invert=FALSE)
+    )
+  }
+  
+  mc = t(sapply(1:length(terms), removed.one.at.a.time, terms=terms, object=object))
+  mc = data.frame(cbind(terms,mc), stringsAsFactors = FALSE)
+  mc
+}
+
+check.non.number = function(x){
+  return.bool = ifelse(is.character(x) | is.factor(x), TRUE, FALSE)
+  return.bool
+}
+
+variable_types = function(variables, data, return.names=F){
+  if (length(variables)>0){
+    characters = sapply(data[,variables, drop=F], check.non.number) 
+    numbers = !characters
+    if (return.names){
+      list(characters=names(characters)[which(characters)], numbers=names(characters)[which(numbers)])  
+    } else {
+      list(characters=(characters), numbers=(numbers))  
+    }
+    
+  }
+}
+
+#### if both numeric and factor, put numeric on x axis and factor as color/line
+# predictors = c("Grad.School", "Years", "GPA", "Profession")
+# data = graduate_income
+# outcome = "Income"
+make_flexplot_formula = function(predictors, outcome, data){
+  
+  # omit those variables not in the dataset
+  nothere = which (!(predictors %in% names(data)))
+  if (length(nothere)>0) predictors = predictors[-nothere]
+  
+  # if they don't have predictors (i.e., fitting a means model)
+  if (length(predictors) == 0) {
+    return(make.formula(outcome, "1"))
+  }
+  # if there's only one variable, make it
+  if (length(predictors)==1){
+    return(make.formula(outcome, predictors))
+  } 
+  
+  
+  # algorithm that puts numeric in first slot, categorical in second slot
+  favored.slots = c(1,4,3,2)
+  vtypes = variable_types(predictors, data)
+  numb = vtypes$numbers
+  cat = vtypes$characters
+  levs = sapply(data[,predictors], function(x) length(levels(x)))
+  custom.sort = numb*1000 + cat*levs
+  custom.sort = sort(custom.sort, decreasing=T)
+  slots = names(custom.sort)[favored.slots]
+  
+  
+  #### now create formula
+  x = c(outcome, "~",slots[1], slots[2], "|", slots[3], slots[4])
+  if (any(is.na(x)))  x = x[-which(is.na(x))]
+  x = paste0(x, collapse="+")
+  x = gsub("+|+", "|", x, fixed=T);x = gsub("+~+", "~", x, fixed=T)
+  x = gsub("+|", "", x, fixed=T)
+  f = as.formula(x)	
+  return(f)
+  
+}
+
+remove_nonlinear_terms = function(terms) {
+  return(grep("[/^:]", terms, value=T, invert=T))
+}
+# tested
+# tested
+test_same_class = function(model1, model2) {
+  # if neither are lme4
+  if (class(model1)[1] != "lmerMod" & class(model2)[1] != "lmerMod") return(NULL)
+  
+  # if one, but not both are lme4
+  if (class(model1)[1] != class(model2)[1]) stop("It looks like you're trying to compare two models that are not both lme4 models. I can't do that! Sorry! \n\n Maybe you should go binge Netflix.")
+  
+  # if they have different random terms
+  re_one = extract_random_term(model1)
+  re_two = extract_random_term(model2)
+  if (re_one != re_two) stop("Whoa there, tiger. You can't have different random effects for the two models.")
+}
+
+
+
+### create custom function to sample data
+sample.subset = function(sample, data){
+  if (sample!=Inf){
+    m = data[sample(1:nrow(data), size=min(sample, nrow(data))),]
+    return(m)
+  } 
+  return(data)
+}
+
+### if they don't want raw data, just make alpha = 0
+raw.alph.func = function(raw.data,alpha=1){
+  if (raw.data){
+    alpha.raw = alpha
+  } else {
+    alpha.raw = 0
+  }	
+  alpha.raw
+}
+
+
+#match_jitter_categorical(.1)
+match_jitter_categorical = function(x){
+  
+  if (is.null(x)) return(c(.2, 0))
+  if (x[1]==TRUE) return(c(.2, 0))
+  
+  if (length(x)==2 & is.numeric(x))
+    return(x)
+  else if (is.numeric(x) & length(x)==1)
+    return(c(x, 0))  
+  else if (!x[1])
+    return(c(0,0))
+  else
+    stop("something's wrong with how you specified jittering.")
+}
+
+#match_jitter_categorical(.2)
+#match_jitter_categorical(T)
+#match_jitter_categorical(c(.2, .1))
+#match_jitter_categorical(F)
+#match_jitter_categorical(c(F,T))
+#jitter = c(.2, .4); data=exercise_data; axis.var=c("therapy.type", "gender")
+#### points = the datapoints
+points.func = function(axis.var, data, jitter){
+  
+  if (is.null(jitter) & !check.non.number(data[,axis.var[1]])){
+    jitter = c(0,0)
+  } else {
+    jitter = match_jitter_categorical(jitter)
+  }
+  
+  ### if they have two axis variables that are categorical
+  if (length(axis.var)>1 & all(sapply(data[,axis.var, drop=F], check.non.number))){
+    jit = paste0("geom_point(data=sample.subset(sample, ", deparse(substitute(data)), 
+                 "), alpha=raw.alph.func(raw.data, alpha=alpha), position=position_jitterdodged(jitter.width=", jitter[1], ", jitter.height=", jitter[2], ", dodge.width=.5))")				
+    
+    ### if they have one categorical axis
+  } else if (length(axis.var)==1 & check.non.number(data[,axis.var])){
+    jit = paste0("geom_jitterd(data=sample.subset(sample, ", deparse(substitute(data)), "), alpha=raw.alph.func(raw.data, alpha=alpha), width=", jitter[1], ", height=", jitter[2], ")")				
+  } else {  
+    jit = paste0("geom_jitterd(data=sample.subset(sample, ", deparse(substitute(data)), "), alpha=raw.alph.func(raw.data, alpha=alpha), width=", jitter[1], ", height=", jitter[2], ")")				
+  }
+  
+  #### return the jittered string
+  return(jit)		
+}
+
+# points.func(axis.var="therapy.type", data=exercise_data, jitter=NULL)
+# points.func("therapy.type", exercise_data, T)
+# points.func("therapy.type", exercise_data, F)
+# points.func("motivation", exercise_data, NULL)
+# points.func(axis.var=c("motivation", "therapy.type"), data=exercise_data, jitter=NULL)
+# points.func(c("gender", "therapy.type"), exercise_data, NULL)
+# points.func(c("gender", "therapy.type"), exercise_data, c(.2, .1))
+
+
+
+
+##' @importFrom MASS rlm	
+#### identify the correct "fit"
+fit.function = function(outcome, predictors, data, suppress_smooth=FALSE, method="loess", spread="sterr", mean.line=F, categorical=FALSE){
+  
+  if (is.numeric(data[,predictors]) & !categorical){
+    if (suppress_smooth){
+      fit.string = "xxxx"
+    } else if (method=="logistic") {
+      
+      #### make sure there's only two levels
+      if (length(unique(data[,outcome]))!=2){
+        stop("To fit a logistic curve, you must have only two levels of your outcome variable.")
+      }
+      
+      fit.string = 'geom_smooth(method = "glm", method.args = list(family = "binomial"), se = se, formula = y~x)'			
+    } else if (method=="rlm"){
+      fit.string = 'geom_smooth(method = "rlm", se = se, formula = y~x)'
+    }else if (method=="poisson" | method=="Gamma") {
+      #### specify the curve
+      fit.string = 'geom_smooth(method = "glm", method.args = list(family = method), se = se, formula = y~x)'
+    } else if (method=="polynomial" | method == "quadratic"){
+      fit.string = 'stat_smooth(method="lm", se=se, formula=y ~ poly(x, 2, raw=TRUE))'
+    } else if (method=="cubic"){
+      fit.string = 'stat_smooth(method="lm", se=se, formula=y ~ poly(x, 3, raw=TRUE))'
+    } else if (method=="lm"){
+      fit.string = 'stat_smooth(method="lm", se=se, formula = y~x)'
+    } else {
+      fit.string = 'geom_smooth(method="loess", se=se, formula = y~x)'
+    }
+    
+    
+    
+  } else {
+    
+    if (suppress_smooth){
+      summary1="xxxx"
+      summary2="xxxx"
+      sum.line="xxxx"						
+    } else if (spread=="stdev"){
+      summary1 = "stat_summary(fun.y='mean', geom='point', size=3, position=position_dodge(width=.5), color = '#bf0303')" 
+      summary2 = "stat_summary(geom='errorbar', fun.ymin = function(z){mean(z)-sd(z)}, fun.ymax = function(z) {mean(z)+sd(z)}, fun.y=median, linewidth = 1.25, width=.2, position=position_dodge(width=.5), color = '#bf0303')"
+      if (mean.line){
+        sum.line = 'stat_summary(aes_string(group= axis[2]), geom="line", fun.y="mean", position=position_dodge(width=.5), color = "#bf0303")'
+      } else {
+        sum.line='xxxx'
+      }
+    } else if (spread=="sterr"){	
+      summary1 = "stat_summary(fun.y='mean', geom='point', size=3, position=position_dodge(width=.5), color = '#bf0303')"
+      summary2 = "stat_summary(geom='errorbar', fun.ymin = function(z){mean(z)-1.96*(sd(z)/sqrt(length(z)-1))}, fun.ymax = function(z){mean(z)+1.96*(sd(z)/sqrt(length(z)-1))}, width=.2, size = 1.25, position=position_dodge(width=.5), color = '#bf0303')"
+      if (mean.line){
+        sum.line = 'stat_summary(aes_string(group= axis[2]), geom="line", fun.y="mean", position=position_dodge(width=.4), color = "#bf0303")'
+      } else {
+        sum.line='xxxx'
+      }
+      
+    } else if (spread == "quartiles"){	
+      summary1 = "stat_summary(fun.y='median', geom='point', size=3, position=position_dodge(width=.4), color = '#bf0303')" 
+      summary2 = "stat_summary(geom='errorbar', fun.ymin = function(z){quantile(z, .25)},linewidth = 1.25,  fun.ymax = function(z) {quantile(z, .75)}, fun.y=median, width=.2, position=position_dodge(width=.4), color = '#bf0303')"
+      if (mean.line){
+        sum.line = 'stat_summary(aes_string(group=axis[2]), geom="line", fun.y="median", position=position_dodge(width=.4), color = "#bf0303")'
+      } else {
+        sum.line='xxxx'
+      }
+      
+    }
+    
+    fit.string = paste0(summary1, "+",summary2, "+", sum.line)		
+    ### check package version of ggplot2
+    if (packageVersion("ggplot2")>"3.2.1"){
+      fit.string = gsub("fun.ymin", "fun.min", fit.string, fixed=T)
+      fit.string = gsub("fun.ymax", "fun.max", fit.string, fixed=T)
+      fit.string = gsub("fun.y", "fun", fit.string, fixed=T)
+    } else {
+      fit.string
+    }
+    
+  }
+  
+  return(fit.string)
+  
+}
+
+
+# find in file. Thanks to https://stackoverflow.com/questions/45502010/is-there-an-r-version-of-rstudios-find-in-files
+fif <- function(what, where=".", in_files="\\.[Rr]$", recursive = TRUE,
+                ignore.case = TRUE) {
+  
+  fils <- list.files(path = where, pattern = in_files, recursive = recursive, full.names = TRUE)
+  found <- FALSE
+  
+  file_cmd <- Sys.which("file")
+  
+  for (fil in fils) {
+    
+    if (nchar(file_cmd) > 0) {
+      ftype <- system2("file",fil, TRUE)
+      if (!grepl("text", ftype)[1]) next
+    }
+    
+    contents <- readLines(fil, warn=FALSE)
+    
+    res <- grepl(what, contents, ignore.case = ignore.case)
+    res <- which(res)
+    
+    if (length(res) > 0) {
+      
+      found <-  TRUE
+      
+      cat(sprintf("%s\n", fil), sep="")
+      cat(sprintf(" % 4s: %s\n", res, contents[res]), sep="")
+      
+    }
+    
+  }
+  
+  if (!found) message("(No results found)")
+  
+}
+

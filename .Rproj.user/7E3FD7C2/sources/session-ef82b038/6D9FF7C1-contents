@@ -1,0 +1,262 @@
+# Install libraries ----
+library(readxl)
+library(readr)
+library(dplyr)
+
+#Getting directory R file is in and setting it as the current working dir
+if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+} else {
+  args <- commandArgs(trailingOnly = FALSE)
+  scriptPath <- sub("--file=", "", args[grep("--file=", args)])
+  if (length(scriptPath) > 0) {
+    setwd(dirname(scriptPath))
+  } else {
+    stop("Cannot determine the script path.")
+  }
+}
+
+
+#FAB classifications of AML
+aml_data <- data.frame(
+  Number = c(9861, 9871, 9872, 9873, 9874, 9875, 9876, 9895, 9866, 9808, 9865, 9867, 9891, 9897, 9910, 9920, 9930, 9945, 9983, 9995, 9996, 9997, 9998),
+  FAB_Class = c("General", "M4 eos", "M0", "M1", "M2", NA, NA, "Other", "M3", "Mixed", NA, "M4", "M5", NA, "M7", NA, NA, NA, NA, NA, NA, NA, NA),
+  Description = c("Acute myeloid leukemia",
+                  "Acute myeloid leukemia with abnormal marrow eosinophils (includes all variants); Acute myeloid leukemia, inv(16)(p13;q22); Acute myeloid leukemia, t(16;16)(p13;q11); Acute myeloid leukemia, CBF-beta/MYH11; Acute myelomonocytic leukemia with abnormal eosinophils",
+                  "Acute myeloid leukemia, minimal differentiation",
+                  "Acute myeloid leukemia without maturation",
+                  "Acute myeloid leukemia with maturation",
+                  "Chronic myelogenous leukemia, BCR/ABL positive; Chronic myelogenous leukemia, Philadelphia chromosome (Ph1) positive; Chronic myelogenous leukemia, t(9;22)(q34;q11); Chronic granulocytic leukemia, Philadelphia chromosome (Ph1) positive; Chronic granulocytic leukemia, t(9;22)(q34;q11); Chronic granulocytic leukemia, BCR/ABL",
+                  "Atypical chronic myeloid leukemia, BCR/ABL negative; Atypical chronic myeloid leukemia, Philadelphia chromosome (Ph1) negative",
+                  "Acute myeloid leukemia with multilineage dysplasia; Acute myeloid leukemia with prior myelodysplastic syndrome; Acute myeloid leukemia without prior myelodysplastic syndrome",
+                  "Acute promyelocytic leukemia, t(15;17) (q22;q11-12)",
+                  "Mixed phenotype acute leukemia, B/myeloid, NOS",
+                  "Acute myeloid leukemia with t(6;9)(p23;q34) DEK-NUP214",
+                  "Acute myelomonocytic leukemia",
+                  "Acute monocytic leukemia",
+                  "Acute myeloid leukemia with 11q23 abnormalities",
+                  "Acute megakaryoblastic leukemia",
+                  "Therapy-related acute myeloid leukemia, NOS",
+                  "Myeloid sarcoma",
+                  "Chronic myelomonocytic leukemia, NOS",
+                  "Refractory anemia with excess blasts",
+                  "Acute myeloid leukemia, MDS transformed",
+                  "Acute myeloid leukemia (Transformed from MDS/CMM)",
+                  "High-risk myelodysplastic syndrome",
+                  "Therapy-induced acute myeloid leukemia")
+)
+
+
+print(aml_data)
+
+#Reading relevant files ----
+#FIMM ----
+FIMM_path <- file.path(".", "data", "FIMM", "File_1.1_Clinical_summary_186_Patients.xlsx")
+FIMM_clinical_info <- read_excel(FIMM_path)
+
+FIMM_sample_annotation_path <- file.path(".", "data", "FIMM", "File_0_Common_sample_annotation_252S.xlsx")
+FIMM_sample_annotation <- read_excel(FIMM_sample_annotation_path)
+
+#Get patient id from sample id
+FIMM_sample_annotation$X <- sapply(strsplit(as.character(FIMM_sample_annotation$Sample_ID), "_"), function(x) paste(x[1:2], collapse = "_"))
+#Only keep unique X and Fab subtype
+FIMM_sample_annotation <- unique(FIMM_sample_annotation[,c('X', 'FAB_subtype')])
+#Clean FAb subtype
+FIMM_sample_annotation$FAB_subtype <- gsub("; ", "/", as.character(FIMM_sample_annotation$FAB_subtype))
+FIMM_sample_annotation$FAB_subtype <- gsub("FAB ", "", as.character(FIMM_sample_annotation$FAB_subtype))
+
+#Oslo ----
+#Oslo cohort clinical information
+oslo_path <- file.path(".", "data", "Oslo", "Suppl_table_S1_July 23_clean (1).xls")
+oslo_clinical_info_only <- read_excel(oslo_path)
+#Oslo cohort survival information
+oslo_survival_path <- file.path(".", "data", "Oslo", "Patient-survival-data-2023-07_no_dates.xlsx")
+oslo_survival_info <- read_excel(oslo_survival_path)
+
+
+#BeatAML ----
+BeatAML_path <- file.path(".", "data", "BeatAML", "beataml_wv1to4_clinical.xlsx")
+BeatAML_clinical_info_only <- read_excel(BeatAML_path)
+BeatAML_clinical_info_only <- BeatAML_clinical_info_only %>% mutate(X = paste0(BeatAML_clinical_info_only$dbgap_subject_id, '_', BeatAML_clinical_info_only$dbgap_dnaseq_sample, '_', BeatAML_clinical_info_only$dbgap_rnaseq_sample))
+
+BeatAML_mutations_path <- file.path(".", "data", "BeatAML", "beat_aml_mutations.csv")
+BeatAML_mutations<- read_csv(BeatAML_mutations_path)
+
+#Make mutations for BeatAML follow same format as FIMM and Oslo
+BeatAML_mutations_transformed <- BeatAML_mutations %>%
+  arrange(dbgap_sample_id, symbol) %>% # Optional: Sort the data frame if needed
+  distinct(dbgap_sample_id, symbol, .keep_all = TRUE) %>% # Keep only the first appearance of each col1 value per id
+  group_by(dbgap_sample_id) %>%
+  summarize(mutations = paste(symbol, collapse = ","), .groups = 'drop')
+
+print("Transformed data frame:")
+print(BeatAML_mutations_transformed)
+
+BeatAML_clinical_info_only <- merge(subset(BeatAML_mutations_transformed, select = c(dbgap_sample_id, mutations)), BeatAML_clinical_info_only, by.x = "dbgap_sample_id", by.y="dbgap_dnaseq_sample")
+
+
+#Concensus file for Oslo and FIMM ----
+concensus_path <- file.path(".", "columns_names_matching_fimm_and_oslo.xlsx")
+concensus_file_oslo_fimm <- read_excel(concensus_path)
+
+#FIMM cleansing ----
+#Renaming columns to Consensus names
+#Creating vector for renaming columns to consensus, excluding rows where FIMM is NA
+rename_vector <- setNames(concensus_file_oslo_fimm$Consensus[!is.na(concensus_file_oslo_fimm$FIMM)], concensus_file_oslo_fimm$FIMM[!is.na(concensus_file_oslo_fimm$FIMM)])
+
+#Rename columns in FIMM to consensus if exists if not keep old column header
+names(FIMM_clinical_info) <- ifelse(names(FIMM_clinical_info) %in% names(rename_vector), rename_vector[names(FIMM_clinical_info)], names(FIMM_clinical_info))
+
+#For rows with FIMM in consensus file as NA, add new columns using the consensus stated and fill with NA
+for (i in 1:nrow(concensus_file_oslo_fimm)) {
+  if (is.na(concensus_file_oslo_fimm$FIMM[i])) {
+    FIMM_clinical_info[[concensus_file_oslo_fimm$Consensus[i]]] <- NA
+  }
+}
+
+print(FIMM_clinical_info)
+
+#Merge FIMM clinical info with sample type annotation to get FAB subtypes and medium annotated for each sample
+FIMM_clinical_info <- inner_join(FIMM_clinical_info, FIMM_sample_annotation, by="X")
+
+
+#Convert ICD O to FAB classification  (ref https://iris.who.int/bitstream/handle/10665/96612/9789241548496_eng.pdf page 221)
+FIMM_clinical_info$Number <- sapply(strsplit(as.character(FIMM_clinical_info$FAB_class), " "), `[`, 1)
+FIMM_clinical_info <- merge(FIMM_clinical_info, aml_data, by = "Number", all.x = TRUE)
+
+FIMM_clinical_info$FAB_class <- ifelse(!is.na(FIMM_clinical_info$FAB_subtype) & nchar(FIMM_clinical_info$FAB_subtype) > 0, FIMM_clinical_info$FAB_subtype,
+                                        ifelse(!is.na(FIMM_clinical_info$FAB_Class) & nchar(FIMM_clinical_info$FAB_Class) > 0, FIMM_clinical_info$FAB_Class, NA))
+
+FIMM_clinical_info$Description <- NULL
+FIMM_clinical_info$FAB_Class <- NULL
+FIMM_clinical_info$FAB_subtype <- NULL
+FIMM_clinical_info$Number <- NULL
+
+#Cleanse gene mutation annotation
+#Function to process the input strings
+remove_no <- function(x) {
+  # Handle NA values first
+  if (is.na(x)) return(NA)
+  x <- trimws(x)
+  # Replace ",No [^,]*" at the beginning or middle of the string
+  x <- gsub(",No [^,]*", "", x)
+  x <- gsub("^No [^,]*,", "", x)
+  
+  # Replace "No [^,]*" at the end of the string
+  x <- gsub("No [^,]*$", "", x)
+  # Trim leading and trailing spaces
+  x <- trimws(x)
+  x <- gsub(" ", "", x)
+  # Return NA if the result is an empty string
+  if (x == "") return(NA) else return(x)
+}
+
+# Apply the function to the data frame
+FIMM_clinical_info$mutations <- sapply(FIMM_clinical_info$mutations, remove_no)
+FIMM_clinical_info$FAB_class <- gsub("M1/M0", "M0/M1", FIMM_clinical_info$FAB_class)
+
+FIMM_clinical_info_path <- file.path(".", "data", "FIMM", "FIMM_clinical_info.csv")
+write.csv(FIMM_clinical_info, FIMM_clinical_info_path)
+
+
+#TODO for FIMM 
+#Extract prior MDS 
+#Extract prior MPN
+#Put the renaming into a function??
+
+#Oslo cleansing ----
+#Merge the two oslo files
+oslo_clinical_info <- merge(oslo_clinical_info_only, oslo_survival_info, by='ID', all=FALSE)
+#Renaming columns to Consensus names
+#Creating vector for renaming columns to consensus, excluding rows where Oslo is NA
+rename_vector <- setNames(concensus_file_oslo_fimm$Consensus[!is.na(concensus_file_oslo_fimm$Oslo)], concensus_file_oslo_fimm$Oslo[!is.na(concensus_file_oslo_fimm$Oslo)])
+
+#Rename columns in FIMM to consensus if exists if not keep old column header
+names(oslo_clinical_info) <- ifelse(names(oslo_clinical_info) %in% names(rename_vector), rename_vector[names(oslo_clinical_info)], names(oslo_clinical_info))
+
+#For rows with FIMM in consensus file as NA, add new columns using the consensus stated and fill with NA
+for (i in 1:nrow(concensus_file_oslo_fimm)) {
+  if (is.na(concensus_file_oslo_fimm$Oslo[i])) {
+    oslo_clinical_info[[concensus_file_oslo_fimm$Consensus[i]]] <- NA
+  }
+}
+
+print(oslo_clinical_info)
+
+#Creating same annotation style for mutations from both datasets
+oslo_clinical_info$mutations <- trimws(oslo_clinical_info$mutations)
+oslo_clinical_info$mutations <- gsub("/", ",", oslo_clinical_info$mutations)
+oslo_clinical_info$mutations <- gsub("FLT3ITD", "FLT3-ITD", oslo_clinical_info$mutations)
+oslo_clinical_info$mutations <- gsub("FLT3TKD", "FLT3-TKD", oslo_clinical_info$mutations)
+oslo_clinical_info$mutations <- gsub(",FLT3-ITDratio", "", oslo_clinical_info$mutations)
+oslo_clinical_info$mutations <- gsub("FLT3-ITDratio,", "", oslo_clinical_info$mutations)
+oslo_clinical_info$mutations <- gsub("FLT3-ITDratio", "FLT3-ITD", oslo_clinical_info$mutations)
+oslo_clinical_info$FAB_class <- gsub("M1/M0", "M0/M1", oslo_clinical_info$FAB_class)
+
+
+oslo_clinical_info_path <- file.path(".", "data", "Oslo", "Oslo_clinical_info.csv")
+write.csv(oslo_clinical_info, oslo_clinical_info_path)
+
+#TODO Oslo cohort
+#Get age at diagnosis for patients form year of birth, would need to calculate it (I will do this) have Birth year
+#Need to extract MDS from Primary_secondary_leukemia
+#Need to extract MPN from Primary_secondary_leukemia
+
+
+
+#BeatAML cleansing ----
+rename_vector <- setNames(concensus_file_oslo_fimm$Consensus[!is.na(concensus_file_oslo_fimm$BeatAML)], concensus_file_oslo_fimm$BeatAML[!is.na(concensus_file_oslo_fimm$BeatAML)])
+
+#Rename columns in FIMM to consensus if exists if not keep old column header
+names(BeatAML_clinical_info_only) <- ifelse(names(BeatAML_clinical_info_only) %in% names(rename_vector), rename_vector[names(BeatAML_clinical_info_only)], names(BeatAML_clinical_info_only))
+
+#For rows with FIMM in consensus file as NA, add new columns using the consensus stated and fill with NA
+for (i in 1:nrow(concensus_file_oslo_fimm)) {
+  if (is.na(concensus_file_oslo_fimm$BeatAML[i])) {
+    BeatAML_clinical_info_only[[concensus_file_oslo_fimm$Consensus[i]]] <- NA
+  }
+}
+
+View(BeatAML_clinical_info_only)
+
+BeatAML_clinical_info_path <- file.path(".", "data", "BeatAML", "BeatAML_clinical_info.csv")
+write.csv(BeatAML_clinical_info_only, BeatAML_clinical_info_path)
+
+columns_not_in_df2_b <- setdiff(names(BeatAML_clinical_info_only), names(FIMM_clinical_info))
+print(columns_not_in_df2_b)
+
+BeatAML_clinical_info_only <- BeatAML_clinical_info_only[ , !(names(BeatAML_clinical_info_only) %in% columns_not_in_df2)]
+
+columns_not_in_df2_b <- setdiff(names(BeatAML_clinical_info_only), names(oslo_clinical_info))
+print(columns_not_in_df2_b)
+
+BeatAML_clinical_info_only <- BeatAML_clinical_info_only[ , !(names(BeatAML_clinical_info_only) %in% columns_not_in_df2)]
+
+
+columns_not_in_df2 <- setdiff(names(FIMM_clinical_info), names(oslo_clinical_info))
+print(columns_not_in_df2)
+
+FIMM_clinical_info <- FIMM_clinical_info[ , !(names(FIMM_clinical_info) %in% columns_not_in_df2)]
+
+columns_not_in_df2 <- setdiff(names(FIMM_clinical_info), names(BeatAML_clinical_info_only))
+print(columns_not_in_df2)
+
+FIMM_clinical_info <- FIMM_clinical_info[ , !(names(FIMM_clinical_info) %in% columns_not_in_df2)]
+
+columns_not_in_df2 <- setdiff(names(oslo_clinical_info), names(FIMM_clinical_info))
+print(columns_not_in_df2)
+oslo_clinical_info <- oslo_clinical_info[ , !(names(oslo_clinical_info) %in% columns_not_in_df2)]
+
+columns_not_in_df2 <- setdiff(names(oslo_clinical_info), names(BeatAML_clinical_info_only))
+print(columns_not_in_df2)
+oslo_clinical_info <- oslo_clinical_info[ , !(names(oslo_clinical_info) %in% columns_not_in_df2)]
+
+
+oslo_clinical_info$lab <- 'Enserink'
+FIMM_clinical_info$lab <- 'FIMM' 
+BeatAML_clinical_info_path$lab <- 'BeatAML'
+FIMM_oslo_clinical_info = rbind(oslo_clinical_info, FIMM_clinical_info)
+
+write_csv(FIMM_oslo_clinical_info, '/Users/katarinawilloch/Desktop/UiO/Project 1/Data/FIMM_oslo_clinical_info.csv')
+
+

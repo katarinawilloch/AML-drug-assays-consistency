@@ -1,0 +1,25 @@
+{
+    "id": "EAF4FE17",
+    "path": null,
+    "project_path": null,
+    "type": "r_code_browser",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1724328691099.0,
+    "source_on_save": false,
+    "relative_order": 24,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "context": ".GlobalEnv:::create_volcano_plot"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 0,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1724328691099,
+    "read_only": false,
+    "read_only_alternatives": []
+}

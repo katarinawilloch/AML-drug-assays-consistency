@@ -33,4 +33,4 @@ The following image shows an example of a diagnodtic plot for the Time until Usa
 The rest of the supplementary diagnostic plots following the article can be found in [Supplementary Diagnostic Plots](https://raw.githubusercontent.com/yourusername/your-repo/main/plots/residuals.png)
 
 
-![Residual Diagnostic Plot](https://github.com/katarinawilloch/AML-drug-assays-consistency/blob/main/Diagnostic%20plots/DSS2/time_until_sample_usage_final_plot.png))
+![Residual Diagnostic Plot](https://github.com/katarinawilloch/AML-drug-assays-consistency/blob/main/Diagnostic%20plots/DSS2/time_until_sample_usage_final_plot.png)

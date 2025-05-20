@@ -2,7 +2,7 @@
 
 This repository contains the code and analysis for the project:  
 **"A multi-center study on the consistency of drug sensitivity testing in patients with AML"**  
-It accompanies the article hoping to be published.
+
 
 ---
 

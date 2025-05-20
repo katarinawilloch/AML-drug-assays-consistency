@@ -30,7 +30,7 @@ This project performs statistical modeling and generates diagnostic plots to eva
 ## 🖼️ Supplementary Diagnostic Plots
 
 The following image shows an example of a diagnodtic plot for the Time until Usage LMM fitted on transformed DSS2 values. It helps assess normality, homoscedasticity, and influential observations. 
-The rest of the supplementary diagnostic plots following the article can be found in [Supplementary Diagnostic Plots](https://raw.githubusercontent.com/yourusername/your-repo/main/plots/residuals.png)
+The rest of the supplementary diagnostic plots following the article can be found in [Supplementary Diagnostic Plots](https://github.com/katarinawilloch/AML-drug-assays-consistency/tree/main/Diagnostic%20plots)
 
 
 ![Residual Diagnostic Plot](https://github.com/katarinawilloch/AML-drug-assays-consistency/blob/main/Diagnostic%20plots/DSS2/time_until_sample_usage_final_plot.png)

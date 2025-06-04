@@ -1,4 +1,22 @@
-#Import libraries ----
+# -------------------------------------------------------- Script overview
+# Script Name: Explore.R
+# Author: Katarina Willoch
+# Date: 2025-06-01
+#
+# Description:
+# This script reads in dose response metric scores DSS1, DSS2, DSS3, IC50, AUC, rAUC,
+# and generates heatmaps and PPCA visualizations
+# 
+#
+# Sections:
+#   1. Load libraries and data
+#   2. Heatmap generation for DSS2
+#   3. PPCA generation for DSS2
+#   4. Heatmap and PPCA generation for all metrics
+#   5. ggbetweenstats
+# -------------------------------------------------------- Script overview
+
+#Install and import libraries ----
 library(dplyr)
 setwd("/Users/katarinawilloch/")
 source('~/Desktop/UiO/Project 1/code/plot_functions_project1.R')
@@ -22,6 +40,11 @@ library(grid)
 library(ggplotify)
 library(ComplexHeatmap)
 library(pcaMethods)
+
+#Import datset containing all metric responses
+
+karolinska_frosen <- karolinska_frosen %>% mutate(Patient.num = paste0(Patient.num, '_', sample)) %>% as.data.frame()
+
 
 #############################################################################################################################################################################################
 #Importing the datasets ----
@@ -120,267 +143,6 @@ colnames(dss_enserink_common_drugs)[colnames(dss_enserink_common_drugs) == "pubc
 dss_enserink_common_drugs$lab <- "Oslo"
 #############################################################################################################################################################################################
 
-#############################################################################################################################################################################################
-#Heatmap single datasets ----
-#FIMM ----
-dss_github_fimm <- subset(dss_github_fimm, !is.na(Patient.num))
-fimm_for_heatmap <- pivot_wider(subset(dss_github_fimm, select = c (Patient.num, DSS2, drug)), names_from = Patient.num, values_from = DSS2)
-fimm_for_heatmap <- as.data.frame(fimm_for_heatmap)
-rownames(fimm_for_heatmap) <- fimm_for_heatmap$drug
-fimm_for_heatmap$drug <- NULL
-heatmap_plots(data.frame(fimm_for_heatmap),NaN, fontsize_row = FALSE, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/fimm_full_drug_set_1.pdf", title = "Heatmap all drugs - FIMM")
-complexheatmap_plots(as.matrix(fimm_for_heatmap),NaN, fontsize_row = FALSE, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/fimm_full_drug_set_complex.pdf", title = "Heatmap all drugs - FIMM", height=290, width=80, c_method= "ward.D2")
-
-
-fimm_common_drugs_heatmap <- pivot_wider(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2)), names_from = Patient.num, values_from = dss2)
-fimm_common_drugs_heatmap <- as.data.frame(fimm_common_drugs_heatmap)
-rownames(fimm_common_drugs_heatmap) <- fimm_common_drugs_heatmap$drug
-fimm_common_drugs_heatmap$drug <- NULL
-fimm_common_drugs_heatmap <- as.data.frame(fimm_common_drugs_heatmap)
-#fimm_common_drugs_heatmap <- na.omit(fimm_common_drugs_heatmap)
-heatmap_plots(as.data.frame(fimm_common_drugs_heatmap),a_col=NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/FIMM_github_calculations_common_drugs1.png", title = "Heatmap common drugs - FIMM")
-
-#Karolinska ----
-karolinska_dss2_org_heat <- pivot_wider(subset(dss_karolinska_github, select = c (Patient.num, DSS2, drug)), names_from = Patient.num, values_from = DSS2)
-karolinska_dss2_org_heat <- as.data.frame(karolinska_dss2_org_heat)
-rownames(karolinska_dss2_org_heat) <- karolinska_dss2_org_heat$drug
-karolinska_dss2_org_heat$drug <- NULL
-karolinska_dss2_org_heat <- as.data.frame(karolinska_dss2_org_heat)
-heatmap_plots(karolinska_dss2_org_heat,NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/karolinska_github_calculations_all_drugs.pdf", title = "DSS2 Heatmap of all drugs \n Karolinska", c_method= "ward.D2", height=295, width=140)
-complexheatmap_plots(as.matrix(karolinska_dss2_org_heat),NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/karolinska_github_calculations_all_drugs_complex.pdf", title = "DSS2 Heatmap of all drugs \n Karolinska", c_method= "ward.D2", height=295, width=140)
-
-
-#Common drugs 
-karolinska_dss2_org_heat_common <- pivot_wider(subset(dss_karolinska_common_drugs, select = c (Patient.num, DSS2, drug)), names_from = Patient.num, values_from = DSS2)
-karolinska_dss2_org_heat_common <- as.data.frame(karolinska_dss2_org_heat_common)
-rownames(karolinska_dss2_org_heat_common) <- karolinska_dss2_org_heat_common$drug
-karolinska_dss2_org_heat_common$drug <- NULL
-heatmap_plots(karolinska_dss2_org_heat_common,NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/karolinska_github_calculations_common_drugs.pdf", title = "Heatmap common drugs - Karolinska")
-
-
-
-
-#Enserink ----
-#Full drug set
-dss_github_enserink_full_set_drugs_for_heatmap <- pivot_wider(subset(dss_github_enserink_full_set_drugs, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
-dss_github_enserink_full_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_full_set_drugs_for_heatmap)
-rownames(dss_github_enserink_full_set_drugs_for_heatmap) <- dss_github_enserink_full_set_drugs_for_heatmap$drug
-dss_github_enserink_full_set_drugs_for_heatmap$drug <- NULL
-dss_github_enserink_full_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_full_set_drugs_for_heatmap)
-heatmap_plots(dss_github_enserink_full_set_drugs_for_heatmap, NaN, fontsize = 26, fontsize_row = FALSE, filename = 'Desktop/UiO/Project 1/Figures/V3/Oslo_github_calculations_full_drug_set.pdf', title = "DSS2 Heatmap of all drugs \n Oslo", c_method= "ward.D2", height=200, width=80)
-complexheatmap_plots(as.matrix(dss_github_enserink_full_set_drugs_for_heatmap), NaN, fontsize = 26, fontsize_row = FALSE, filename = 'Desktop/UiO/Project 1/Figures/V3/Oslo_github_calculations_full_drug_set_complex.pdf', title = "DSS2 Heatmap of all drugs \n Oslo", c_method= "ward.D2", height=200, width=80)
-
-
-#Common drugs 
-dss_github_enserink_common_set_drugs_for_heatmap <- pivot_wider(subset(dss_enserink_common_drugs, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
-dss_github_enserink_common_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_common_set_drugs_for_heatmap)
-rownames(dss_github_enserink_common_set_drugs_for_heatmap) <- dss_github_enserink_common_set_drugs_for_heatmap$drug
-dss_github_enserink_common_set_drugs_for_heatmap$drug <- NULL
-dss_github_enserink_common_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_common_set_drugs_for_heatmap)
-heatmap_plots(dss_github_enserink_common_set_drugs_for_heatmap, NaN, fontsize = 26, fontsize_row = FALSE, filename = 'Desktop/UiO/Project 1/Figures/V2_prepare_article/Enserink_github_calculations_common_drugs.pdf', title = "Heatmap common drugs - Enserink")
-
-
-#BeatAML ----
-#full drug set
-beat_aml_for_heatmap <- pivot_wider(subset(dss_github_beat_aml, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
-beat_aml_for_heatmap <- as.data.frame(beat_aml_for_heatmap)
-rownames(beat_aml_for_heatmap) <- beat_aml_for_heatmap$drug
-beat_aml_for_heatmap$drug <- NULL
-beat_aml_for_heatmap <- as.data.frame(beat_aml_for_heatmap)
-# # Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_for_heatmap, 1, function(row) sum(is.na(row)))
-# #Remove row if total missing in row is higher than 200
-df_filtered <- beat_aml_for_heatmap[missing_per_row <= 200, ]
-# # Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_for_heatmap, 2, function(row) sum(is.na(row)))
-# #Remove col if total missing in col is higher than 100
-df_filtered <- df_filtered[,missing_per_col <= 100]
-# #beat_aml_for_heatmap[is.na(beat_aml_for_heatmap)] <- 0
-heatmap_plots(data.frame(df_filtered),NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/BeatAML_github_calculations_full_drug_set.pdf", title = "DSS2 Heatmap of all drugs \n BeatAML", c_method= "ward.D2", height=70, width=310)
-complexheatmap_plots(as.matrix(df_filtered), fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/draw/BeatAML_github_calculations_full_drug_set_complex.pdf", title = "DSS2 Heatmap of all drugs \n BeatAML", c_method= "ward.D2", height=45, width=140)
-
-#Common drugs
-beat_aml_for_heatmap_common <- pivot_wider(subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
-beat_aml_for_heatmap_common <- as.data.frame(beat_aml_for_heatmap_common)
-rownames(beat_aml_for_heatmap_common) <- beat_aml_for_heatmap_common$drug
-beat_aml_for_heatmap_common$drug <- NULL
-beat_aml_for_heatmap_common <- as.data.frame(beat_aml_for_heatmap_common)
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_for_heatmap_common, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-df_filtered <- beat_aml_for_heatmap_common[missing_per_row <= 500, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_for_heatmap_common, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-df_filtered <- beat_aml_for_heatmap_common[,missing_per_col <= 45]
-
-subset(dss_beat_aml_common_drugs, is.finite(DSS2))
-heatmap_plots(data.frame(beat_aml_for_heatmap_common),NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/BeatAML_github_calculations_common_drugs.pdf", title = "Heatmap common drugs - BeatAML", c_row=FALSE, c_col=FALSE)
-#############################################################################################################################################################################################
-
-
-#############################################################################################################################################################################################
-#Heatmap two datasets ----
- #FIMM-Karolinska ----
-fimm_karolinska<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, DSS2,lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2,lab)))
-
-a_col <- unique(subset(fimm_karolinska, select = c(lab, Patient.num)))
-a_col <- as.data.frame(a_col)
-rownames(a_col) <- a_col$Patient.num
-a_col$Patient.num <- NULL
-
-fimm_karolinska$lab <- NULL
-all_dss_for_heatmap <- pivot_wider(fimm_karolinska, names_from = Patient.num, values_from = dss2)
-all_dss_for_heatmap <- as.data.frame(all_dss_for_heatmap)
-rownames(all_dss_for_heatmap) <- all_dss_for_heatmap$drug
-all_dss_for_heatmap$drug <- NULL
-all_dss_for_heatmap <- as.data.frame(all_dss_for_heatmap)
-heatmap_plots(all_dss_for_heatmap,a_col, fontsize_row = TRUE, filename = "Desktop/UiO/Project 1/Figures/fimm_karolinska_bæææ.pdf")
-
- #BeatAML-Enserink ----
-beat_aml_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-
-a_col <- unique(subset(beat_aml_enserink, select = c(lab, Patient.num)))
-a_col <- as.data.frame(a_col)
-rownames(a_col) <- a_col$Patient.num
-
-beat_aml_enserink$lab <- NULL
-beat_aml_enserink_for_heatmap <- pivot_wider(beat_aml_enserink, names_from = Patient.num, values_from = dss2)
-beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
-rownames(beat_aml_enserink_for_heatmap) <- beat_aml_enserink_for_heatmap$drug
-beat_aml_enserink_for_heatmap$drug <- NULL
-beat_aml_enserink_for_heatmap$lab <- NULL
-beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
-
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap[missing_per_row <= 200, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_enserink_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap_filtered[,missing_per_col <= 30]
-#beat_aml_for_heatmap[is.na(beat_aml_for_heatmap)] <- 0
-dss_long <- as.data.frame(beat_aml_enserink_for_heatmap_filtered)
-#dss_long$drug <- rownames(dss_long)
-dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'Patient 100':'2752_BA3448D_BA3448R', factor_key=TRUE) %>% as.data.frame()
-a_col <- as.data.frame(a_col)
-a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
-a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
-rownames(a) <- a$patient_id
-a$patient_id <- NULL
-a <- as.data.frame(a)
-
-a_color = list(
-  lab = c("BeatAML" = "#F4A582", "Enserink" = "#92C5DE"))
-
-heatmap_plots(as.data.frame(beat_aml_enserink_for_heatmap_filtered), a_col=a, a_color = a_color, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/enserink_beat_aml.pdf")
-
- #FIMM-Enserink ----
-fimm_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-
-a_col <- unique(subset(fimm_enserink, select = c(lab, Patient.num)))
-a_col <- as.data.frame(a_col)
-rownames(a_col) <- a_col$Patient.num
-a_col$Patient.num <- NULL
-
-fimm_enserink$lab <- NULL
-fimm_enserink_for_heatmap <- pivot_wider(fimm_enserink, names_from = Patient.num, values_from = dss2)
-fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
-rownames(fimm_enserink_for_heatmap) <- fimm_enserink_for_heatmap$drug
-fimm_enserink_for_heatmap$drug <- NULL
-fimm_enserink_for_heatmap$lab <- NULL
-fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
-
-heatmap_plots(fimm_enserink_for_heatmap,a_col, fontsize_row = TRUE, filename = "Desktop/UiO/Project 1/Figures/fimm_enserink.pdf")
-
-#Karolinska-Enserink ----
-karolinska_enserink<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, DSS2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, DSS2,lab)))
-
-a_col <- unique(subset(karolinska_enserink, select = c(lab, Patient.num)))
-a_col <- as.data.frame(a_col)
-rownames(a_col) <- a_col$Patient.num
-a_col$Patient.num <- NULL
-
-karolinska_enserink$lab <- NULL
-karolinska_enserink_for_heatmap <- pivot_wider(karolinska_enserink, names_from = Patient.num, values_from = DSS2)
-karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
-rownames(karolinska_enserink_for_heatmap) <- karolinska_enserink_for_heatmap$drug
-karolinska_enserink_for_heatmap$drug <- NULL
-karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
-heatmap_plots(karolinska_enserink_for_heatmap,a_col, fontsize_row = TRUE, filename = "Desktop/UiO/Project 1/Figures/karolinska_Enserink_test.pdf", height = 70, width = 130)
-
-#FIMM-BeatML ----
-beat_aml_FIMM <- rbind(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-
-a_col <- unique(subset(beat_aml_FIMM, select = c(lab, Patient.num)))
-a_col <- as.data.frame(a_col)
-rownames(a_col) <- a_col$Patient.num
-
-beat_aml_FIMM$lab <- NULL
-beat_aml_FIMM_for_heatmap <- pivot_wider(beat_aml_FIMM, names_from = Patient.num, values_from = dss2)
-beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
-rownames(beat_aml_FIMM_for_heatmap) <- beat_aml_FIMM_for_heatmap$drug
-beat_aml_FIMM_for_heatmap$drug <- NULL
-beat_aml_FIMM_for_heatmap$lab <- NULL
-beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
-
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_FIMM_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap[missing_per_row <= 200, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_FIMM_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap_filtered[,missing_per_col <= 25]
-#beat_aml_FIMM_for_heatmap_filtered[is.na(beat_aml_FIMM_for_heatmap_filtered)] <- 0
-dss_long <- as.data.frame(beat_aml_FIMM_for_heatmap_filtered)
-#dss_long$drug <- rownames(dss_long)
-dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'BERG_470012_03022016_9999_BM':'2554_BA2594D_BA2594R', factor_key=TRUE) %>% as.data.frame()
-a_col <- as.data.frame(a_col)
-a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
-a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
-rownames(a) <- a$patient_id
-a$patient_id <- NULL
-a <- as.data.frame(a)
-
-heatmap_plots(as.data.frame(beat_aml_FIMM_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/FIMM_beat_aml.pdf")
-
-
-#Karolinska-BeatAML ----
-beat_aml_karolinska <- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-
-a_col <- unique(subset(beat_aml_karolinska, select = c(lab, Patient.num)))
-a_col <- as.data.frame(a_col)
-rownames(a_col) <- a_col$Patient.num
-
-beat_aml_karolinska$lab <- NULL
-beat_aml_karolinska_for_heatmap <- pivot_wider(beat_aml_karolinska, names_from = Patient.num, values_from = dss2)
-beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
-rownames(beat_aml_karolinska_for_heatmap) <- beat_aml_karolinska_for_heatmap$drug
-beat_aml_karolinska_for_heatmap$drug <- NULL
-beat_aml_karolinska_for_heatmap$lab <- NULL
-beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
-
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_karolinska_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap[missing_per_row <= 200, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_karolinska_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap_filtered[,missing_per_col <= 25]
-#beat_aml_karolinska_for_heatmap_filtered[is.na(beat_aml_karolinska_for_heatmap_filtered)] <- 0
-dss_long <- as.data.frame(beat_aml_karolinska_for_heatmap_filtered)
-#dss_long$drug <- rownames(dss_long)
-dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'AML_001':'2554_BA2594D_BA2594R', factor_key=TRUE) %>% as.data.frame()
-a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
-a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
-rownames(a) <- a$patient_id
-a$patient_id <- NULL
-a <- as.data.frame(a)
-
-heatmap_plots(as.data.frame(beat_aml_karolinska_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/Karolinska_beat_aml.pdf")
 
 
 
@@ -592,113 +354,6 @@ ComplexHeatmap::draw(f)
 ###################################################################################################################################################################################################################################
 
 
-###################################################################################################################################################################################################################################
-#PCA plot two datasets ----
-#FIMM-Karolinska ----
-fimm_karolinska<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2,lab)))
-all_dss_for_heatmap <- pivot_wider(fimm_karolinska, names_from = drug, values_from = dss2)
-all_dss_for_heatmap <- as.data.frame(all_dss_for_heatmap)
-
-na_counts <- colSums(is.na(all_dss_for_heatmap))
-df_clean <-all_dss_for_heatmap[, na_counts < 30]
-df_clean <- df_clean[complete.cases(df_clean), ]
-dim(df_clean)
-
-all_dss_for_heatmap <- na.omit(df_clean)
-pca_plots(all_dss_for_heatmap, title = "PCA Plot", "~/Desktop/UiO/Project 1/Figures/FIMM_Karolinska.png", 'Patient.num', 'lab')
-
-#Enserink-BeatAML ----
-beat_aml_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-beat_aml_enserink_for_heatmap <- pivot_wider(beat_aml_enserink, names_from = drug, values_from = dss2)
-beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
-rownames(beat_aml_enserink_for_heatmap) <- beat_aml_enserink_for_heatmap$drug
-beat_aml_enserink_for_heatmap$drug <- NULL
-beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
-
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap[missing_per_row <= 30, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_enserink_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap_filtered[,missing_per_col <= 200]
-beat_aml_enserink_for_heatmap_filtered <- na.omit(beat_aml_enserink_for_heatmap_filtered)
-#all_dss_for_heatmap <- na.omit(beat_aml_enserink_for_heatmap_filtered)
-pca_plots(beat_aml_enserink_for_heatmap_filtered, title = "PCA Plot - Enserink and BeatAML", "~/Desktop/UiO/Project 1/Figures/Enserink_BeatAML_PCA_Plot.png", 'Patient.num', 'lab')
-
-#FIMM-Enserink ----
-fimm_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-
-fimm_enserink_for_heatmap <- pivot_wider(fimm_enserink, names_from = drug, values_from = dss2)
-fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
-rownames(fimm_enserink_for_heatmap) <- fimm_enserink_for_heatmap$drug
-fimm_enserink_for_heatmap$drug <- NULL
-fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
-
-# Check how many values are missing in each col
-missing_per_col <- apply(fimm_enserink_for_heatmap, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-fimm_enserink_for_heatmap <- fimm_enserink_for_heatmap[,missing_per_col <= 100]
-fimm_enserink_for_heatmap <- na.omit(fimm_enserink_for_heatmap)
-pca_plots(fimm_enserink_for_heatmap, title = "PCA Plot - Enserink and FIMM", "~/Desktop/UiO/Project 1/Figures/Enserink_FIMM_PCA_Plot.png", 'Patient.num', 'lab')
-
-
-#Karolinska-Enserink ----
-karolinska_enserink<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, dss2,lab)))
-
-karolinska_enserink_for_heatmap <- pivot_wider(karolinska_enserink, names_from = drug, values_from = dss2)
-karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
-rownames(karolinska_enserink_for_heatmap) <- karolinska_enserink_for_heatmap$drug
-karolinska_enserink_for_heatmap$drug <- NULL
-karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
-
-# Check how many values are missing in each col
-missing_per_col <- apply(karolinska_enserink_for_heatmap, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-karolinska_enserink_for_heatmap <- karolinska_enserink_for_heatmap[,missing_per_col <= 100]
-karolinska_enserink_for_heatmap <- na.omit(karolinska_enserink_for_heatmap)
-pca_plots(karolinska_enserink_for_heatmap, title = "PCA Plot - Karolinska and Enserink", "~/Desktop/UiO/Project 1/Figures/Enserink_Karolinska_PCA_Plot.png", 'Patient.num', 'lab')
-
-
-#FIMM-BeatAML ----
-beat_aml_FIMM <- rbind(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-beat_aml_FIMM <- subset(beat_aml_FIMM, drug != 'Sapanisertib')
-beat_aml_FIMM_for_heatmap <- pivot_wider(beat_aml_FIMM, names_from = drug, values_from = dss2)
-beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
-rownames(beat_aml_FIMM_for_heatmap) <- beat_aml_FIMM_for_heatmap$Patient.num
-beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
-
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_FIMM_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap[missing_per_row <= 30, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_FIMM_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap_filtered[,missing_per_col <= 200]
-beat_aml_FIMM_for_heatmap_filtered <- na.omit(beat_aml_FIMM_for_heatmap_filtered)
-pca_plots(beat_aml_FIMM_for_heatmap_filtered, title = "PCA Plot - BeatAML and FIMM", "~/Desktop/UiO/Project 1/Figures/FIMM_BeatAML_PCA_Plot.png", 'Patient.num', 'lab')
-
-
-#Karolinska-BeatAML ----
-beat_aml_karolinska <- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-beat_aml_karolinska <- subset(beat_aml_karolinska, drug != 'Tanespimycin')
-beat_aml_karolinska_for_heatmap <- pivot_wider(beat_aml_karolinska, names_from = drug, values_from = dss2)
-beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
-rownames(beat_aml_karolinska_for_heatmap) <- beat_aml_karolinska_for_heatmap$Patient.num
-beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
-
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_karolinska_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap[missing_per_row <= 30, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_karolinska_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap_filtered[,missing_per_col <= 200]
-beat_aml_karolinska_for_heatmap_filtered <- na.omit(beat_aml_karolinska_for_heatmap_filtered)
-pca_plots(beat_aml_karolinska_for_heatmap_filtered, title = "PCA Plot - BeatAML and FIMM", "~/Desktop/UiO/Project 1/Figures/Karolinska_BeatAML_PCA_Plot.png", 'Patient.num', 'lab')
 
 
 
@@ -760,6 +415,26 @@ ggplot(pca_data, aes(x = PC1, y = PC2, color=lab)) +
                                               plot.title = element_text(size = 20))
 
 ppca <- pca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], method="ppca", nPcs=3, seed=123)
+# Get explained variance
+ppca_var <- summary(ppca)
+
+# Extract percent variance for PC1 and PC2
+percent_var <- round(ppca@R2 * 100, 1)
+
+# Create a data frame for plotting
+var_df <- data.frame(
+  PC = paste0("PC", seq_along(percent_var)),
+  Variance = percent_var
+)
+
+ggplot(var_df, aes(x = PC, y = Variance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = paste0(round(Variance, 1), "%")), vjust = -0.5, size = 4) +
+  labs(title = "Explained Variance by Principal Component",
+       y = "Percent Variance Explained",
+       x = "Principal Component") +
+  theme_minimal()
+
 ## Get the estimated complete observations
 ppca_scores <- scores(ppca)
 nrow(ppca_scores)
@@ -786,6 +461,11 @@ ppca_data$`Average DSS2` <- as.numeric(ppca_data$`Average DSS2`)
 ppca_data$Lab <- as.factor(ppca_data$lab)
 ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color=Lab)) +
   geom_point() +
+  labs(
+    x = paste0("PC1 (", round(percent_var[1], 1), "%)"),
+    y = paste0("PC2 (", round(percent_var[2], 1), "%)"),
+    color = ""
+  ) +
   #geom_text_repel(data = furthest_points, aes(label = Patient.num), size = 4, box.padding = 0.5, max.overlaps = 20) +
   #scale_color_gradient(low = "lightblue", high = "blue") + 
   scale_color_manual(values = c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")) +
@@ -817,7 +497,7 @@ ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color=Lab)) 
 
 print(ppca_plot)
 
-ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/PPCA_plot_all_data_all_labs.png", plot = ppca_plot, width = 10, height = 8, dpi = 300)
+ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/v1/PPCA_plot_all_data_all_labs.png", plot = ppca_plot, width = 10, height = 8, dpi = 300)
 midpoint_value <- median(ppca_data[ppca_data$lab == "Beat AML",]$`Average DSS2`, na.rm = TRUE)
 ppca_data$`Average DSS2` <- as.numeric(ppca_data$`Average DSS2`)
 dss2_ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color = `Average DSS2`)) +
@@ -860,6 +540,101 @@ dss2_ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color =
   ) 
 dss2_ppca_plot
 ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/avg_dss_score_colorsPPCA_plot_all_data_all_labs_v1.png", plot = dss2_ppca_plot, width = 10, height = 8, dpi = 300)
+
+
+
+beat_aml_karolinska <- rbind(subset(dss_karolinska_common_drugs, select = c(drug, Patient.num, DSS2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+beat_aml_karolinska_FIMM <- rbind(beat_aml_karolinska, subset(dss_fimm_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+beat_aml_karolinska_FIMM_enserink<- rbind(beat_aml_karolinska_FIMM, subset(dss_github_enserink, select = c(drug, Patient.num, DSS2,lab)))
+
+clinical_info <- all_response_metrics %>% mutate(Patient.num = ifelse(lab == "Karolinska", paste0(as.character(Patient.num), "_", as.character(sample)), as.character(Patient.num)))
+
+beat_aml_karolinska_FIMM_enserink <- merge(beat_aml_karolinska_FIMM_enserink, unique(clinical_info[,c('Patient.num', 'Disease.status', 'Tissue', 'sample')]), by='Patient.num')
+beat_aml_karolinska_FIMM_enserink[beat_aml_karolinska_FIMM_enserink$lab == "Karolinska",]
+specific_order <- c("Helsinki","Beat AML", "Karolinska", "Oslo")
+
+# Convert the column to a factor with the specific order
+beat_aml_karolinska_FIMM_enserink$lab <- factor(beat_aml_karolinska_FIMM_enserink$lab, levels = specific_order)
+
+
+beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Tanespimycin')
+beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Sapanisertib')
+beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != '001, RAD')
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- pivot_wider(beat_aml_karolinska_FIMM_enserink, names_from = drug, values_from = DSS2)
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- beat_aml_karolinska_FIMM_enserink_for_heatmap[!is.na(beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num),]
+
+rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+
+ppca <- pca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], method="ppca", nPcs=3, seed=123)
+# Get explained variance
+ppca_var <- summary(ppca)
+
+# Extract percent variance for PC1 and PC2
+percent_var <- round(ppca@R2 * 100, 1)
+
+# Create a data frame for plotting
+var_df <- data.frame(
+  PC = paste0("PC", seq_along(percent_var)),
+  Variance = percent_var
+)
+
+ggplot(var_df, aes(x = PC, y = Variance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = paste0(round(Variance, 1), "%")), vjust = -0.5, size = 4) +
+  labs(title = "Explained Variance by Principal Component",
+       y = "Percent Variance Explained",
+       x = "Principal Component") +
+  theme_minimal()
+
+## Get the estimated complete observations
+ppca_scores <- scores(ppca)
+nrow(ppca_scores)
+patient_clinical_ppca <- merge(ppca_scores, beat_aml_karolinska_FIMM_enserink_for_heatmap, by = 'row.names')
+
+#patient_clinical_ppca <- merge(ppca_data, unique(all_response_metrics[,c('Patient.num', 'Disease.status', 'Tissue', 'sample')]), by='Patient.num')
+#patient_clinical_ppca %>% group_by(Tissue) %>% dplyr::summarize(c = n())
+#patient_clinical_ppca[is.na(patient_clinical_ppca$Tissue),]
+#all_response_metrics[is.na(all_response_metrics$Tissue),]
+clinical_ppca_plot <- ggplot(as.data.frame(patient_clinical_ppca), aes(x = PC1, y = PC2, color=`Disease.status`, shape=Tissue)) +
+  geom_point() +
+  labs(
+    x = paste0("PC1 (", round(percent_var[1], 1), "%)"),
+    y = paste0("PC2 (", round(percent_var[2], 1), "%)"),
+    color = ""
+  ) +
+  #geom_text_repel(data = furthest_points, aes(label = Patient.num), size = 4, box.padding = 0.5, max.overlaps = 20) +
+  #scale_color_gradient(low = "lightblue", high = "blue") + 
+  #scale_color_manual(values = c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")) +
+  labs(color = "") + 
+  guides(
+    color = guide_legend(
+      override.aes = aes(shape = 15, size = 4, width = 1.5, height = 1),  # Adjust legend symbol size
+      label.spacing = unit(0.5, "cm")  # Reduce space between text and legend symbol
+    )
+  ) +  
+  #theme_minimal()+
+  theme(
+    panel.background = element_blank(), 
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12, family = "Arial"),    # Center legend text
+    legend.position = "right",                                
+    legend.justification = "center",        # Ensure the legend is centered
+    #legend.box = "horizontal",
+    legend.key = element_blank(),                            # Remove key background
+    legend.spacing.x = unit(0.2, "cm"),  
+    legend.key.size = unit(0.5, "lines"),      # Adjust size of the colored squares
+    legend.margin = margin(t = 0, b = 0, l = 0, r = 0),
+    plot.margin = margin(10, 10, 10, 10),
+    axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
+    axis.text = element_text(size = 10, family = "Arial")
+  )
+#guides(color = guide_legend(override.aes = aes(label = "", alpha = 1)))
+
+print(clinical_ppca_plot)
 
 #############################################################################################################################################################################################
 #----PPCA plot Other metrics----
@@ -1075,86 +850,6 @@ ppca_plot <- ggplot(as.data.frame(ppca_data_AUC), aes(x = PC1, y = PC2, color=La
 
 print(ppca_plot)
 
-#############################################################################################################################################################################################
-#Wilcoxon rank sum test - see weather there is a difference between the dss values for the two datasets----
-#Enserink-BeatAML ----
-#Common drugs
-beat_aml_enserink_w <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-beat_aml_enserink_w$binary_lab<- ifelse(beat_aml_enserink_w$lab == "Enserink", 1, 0)
-#ighv both single and combination drug----
-beat_aml_enserink_wilcoxon_test <- wilcox_test(beat_aml_enserink_w, 'drug', "binary_lab", 'dss2')
-# Create volcano plot using the result dataframe
-volcano_beat_aml_enserink <- create_volcano_plot(beat_aml_enserink_wilcoxon_test, title ='Volcano Plot for IGHV mutations', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/enserink_beat_aml_wilcoxon.png')
-# Print the volcano plot
-print(volcano_beat_aml_enserink)
-
-
-fimm_enserink <- rbind(subset(dss_fimm, select = c(drug, Patient.num, dss2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, dss2,lab)))
-
-fimm_enserink$binary_lab<- ifelse(fimm_enserink$lab == "Enserink", 1, 0)
-#ighv both single and combination drug----
-ighv_df <- wilcox_test(fimm_enserink, 'drug', "binary_lab", 'dss2')
-# Create volcano plot using the result dataframe
-volcano_plot_ighv <- create_volcano_plot(ighv_df, title ='Volcano Plot for FIMM Enserink', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/fimm_Enserink.png')
-# Print the volcano plot
-print(volcano_plot_ighv)
-
-
-#FIMM-Karolinska ----
-fimm_karolinska<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2,lab)))
-fimm_karolinska$binary_lab<- ifelse(fimm_karolinska$lab == "FIMM", 1, 0)
-fimm_karolinska <- na.omit(fimm_karolinska)
-binary_lab_fimm_karolinska <- wilcox_test(subset(fimm_karolinska, drug != 'Sapanisertib'), 'drug', "binary_lab", 'dss2')
-# Create volcano plot using the result dataframe
-volcano_plot_fimm_karolinska <- create_volcano_plot(binary_lab_fimm_karolinska, title ='Volcano Plot Wilcoxon rank sum test - DSS2 Karolinska vs FIMM', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM_Karolinska_vulcano_plot.png')
-# Print the volcano plot
-print(volcano_plot_fimm_karolinska)
-
-#FIMM-Enserink ----
-fimm_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-fimm_enserink$binary_lab<- ifelse(fimm_enserink$lab == "FIMM", 1, 0)
-fimm_enserink <- na.omit(fimm_enserink)
-binary_lab_fimm_enserink <- wilcox_test(fimm_enserink, 'drug', "binary_lab", 'dss2')
-# Create volcano plot using the result dataframe
-volcano_plot_fimm_enserink <- create_volcano_plot(binary_lab_fimm_enserink, title ='Volcano Plot Wilcoxon rank sum test - DSS2 Enserink vs FIMM', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM_Enserink_vulcano_plot.png')
-# Print the volcano plot
-print(volcano_plot_fimm_enserink)
-
-
-#Karolinska-Enserink ----
-karolinska_enserink<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, dss2,lab)))
-karolinska_enserink$binary_lab<- ifelse(karolinska_enserink$lab == "Enserink", 1, 0)
-karolinska_enserink <- na.omit(karolinska_enserink)
-
-binary_lab_karolinska_enserink <- wilcox_test(karolinska_enserink, 'drug', "binary_lab", 'dss2')
-# Create volcano plot using the result dataframe
-volcano_plot_karolinska_enserink <- create_volcano_plot(binary_lab_karolinska_enserink, title ='Volcano Plot Wilcoxon rank sum test - DSS2 Karolinska vs Enserink', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska_Enserink_vulcano_plot.png')
-# Print the volcano plot
-print(volcano_plot_karolinska_enserink)
-
-#FIMM-BeatAML ----
-beat_aml_FIMM <- rbind(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-beat_aml_FIMM$binary_lab<- ifelse(beat_aml_FIMM$lab == "FIMM", 1, 0)
-beat_aml_FIMM <- na.omit(beat_aml_FIMM)
-
-binary_lab_beat_aml_FIMM <- wilcox_test(beat_aml_FIMM, 'drug', "binary_lab", 'dss2')
-# Create volcano plot using the result dataframe
-volcano_plot_beat_aml_FIMM <- create_volcano_plot(binary_lab_beat_aml_FIMM, title ='Volcano Plot Wilcoxon rank sum test - DSS2 FIMM vs BeatAML', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM_BeatAML_vulcano_plot.png')
-# Print the volcano plot
-print(volcano_plot_beat_aml_FIMM)
-
-
-#Karolinska-BeatAML ----
-beat_aml_karolinska <- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
-beat_aml_karolinska$binary_lab<- ifelse(beat_aml_karolinska$lab == "Karolinska", 1, 0)
-beat_aml_karolinska <- na.omit(beat_aml_karolinska)
-
-binary_lab_beat_aml_karolinska <- wilcox_test(beat_aml_karolinska, 'drug', "binary_lab", 'dss2')
-# Create volcano plot using the result dataframe
-volcano_plot_beat_aml_karolinska <- create_volcano_plot(binary_lab_beat_aml_karolinska, title ='Volcano Plot Wilcoxon rank sum test - DSS2 BeatAML vs Karolinska', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska_BeatAML_vulcano_plot.png')
-# Print the volcano plot
-print(volcano_plot_beat_aml_karolinska)
-#############################################################################################################################################################################################
 
 
 xicor <- function(X, Y, ties = TRUE){
@@ -1327,3 +1022,453 @@ lt = apply(m, 2, function(x) data.frame(density(x)[c("x", "y")]))
 ha = rowAnnotation(foo = anno_joyplot(lt, width = unit(4, "cm"), 
                                       gp = gpar(fill = 1:10), transparency = 0.75))
 #############################################################################################################################################################################################
+
+# 
+# #############################################################################################################################################################################################
+# #Heatmap single datasets ----
+# #FIMM ----
+# dss_github_fimm <- subset(dss_github_fimm, !is.na(Patient.num))
+# fimm_for_heatmap <- pivot_wider(subset(dss_github_fimm, select = c (Patient.num, DSS2, drug)), names_from = Patient.num, values_from = DSS2)
+# fimm_for_heatmap <- as.data.frame(fimm_for_heatmap)
+# rownames(fimm_for_heatmap) <- fimm_for_heatmap$drug
+# fimm_for_heatmap$drug <- NULL
+# heatmap_plots(data.frame(fimm_for_heatmap),NaN, fontsize_row = FALSE, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/fimm_full_drug_set_1.pdf", title = "Heatmap all drugs - FIMM")
+# complexheatmap_plots(as.matrix(fimm_for_heatmap),NaN, fontsize_row = FALSE, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/fimm_full_drug_set_complex.pdf", title = "Heatmap all drugs - FIMM", height=290, width=80, c_method= "ward.D2")
+# 
+# 
+# fimm_common_drugs_heatmap <- pivot_wider(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2)), names_from = Patient.num, values_from = dss2)
+# fimm_common_drugs_heatmap <- as.data.frame(fimm_common_drugs_heatmap)
+# rownames(fimm_common_drugs_heatmap) <- fimm_common_drugs_heatmap$drug
+# fimm_common_drugs_heatmap$drug <- NULL
+# fimm_common_drugs_heatmap <- as.data.frame(fimm_common_drugs_heatmap)
+# #fimm_common_drugs_heatmap <- na.omit(fimm_common_drugs_heatmap)
+# heatmap_plots(as.data.frame(fimm_common_drugs_heatmap),a_col=NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/FIMM_github_calculations_common_drugs1.png", title = "Heatmap common drugs - FIMM")
+# 
+# #Karolinska ----
+# karolinska_dss2_org_heat <- pivot_wider(subset(dss_karolinska_github, select = c (Patient.num, DSS2, drug)), names_from = Patient.num, values_from = DSS2)
+# karolinska_dss2_org_heat <- as.data.frame(karolinska_dss2_org_heat)
+# rownames(karolinska_dss2_org_heat) <- karolinska_dss2_org_heat$drug
+# karolinska_dss2_org_heat$drug <- NULL
+# karolinska_dss2_org_heat <- as.data.frame(karolinska_dss2_org_heat)
+# heatmap_plots(karolinska_dss2_org_heat,NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/karolinska_github_calculations_all_drugs.pdf", title = "DSS2 Heatmap of all drugs \n Karolinska", c_method= "ward.D2", height=295, width=140)
+# complexheatmap_plots(as.matrix(karolinska_dss2_org_heat),NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/karolinska_github_calculations_all_drugs_complex.pdf", title = "DSS2 Heatmap of all drugs \n Karolinska", c_method= "ward.D2", height=295, width=140)
+# 
+# 
+# #Common drugs 
+# karolinska_dss2_org_heat_common <- pivot_wider(subset(dss_karolinska_common_drugs, select = c (Patient.num, DSS2, drug)), names_from = Patient.num, values_from = DSS2)
+# karolinska_dss2_org_heat_common <- as.data.frame(karolinska_dss2_org_heat_common)
+# rownames(karolinska_dss2_org_heat_common) <- karolinska_dss2_org_heat_common$drug
+# karolinska_dss2_org_heat_common$drug <- NULL
+# heatmap_plots(karolinska_dss2_org_heat_common,NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/karolinska_github_calculations_common_drugs.pdf", title = "Heatmap common drugs - Karolinska")
+# 
+# 
+# 
+# 
+# #Enserink ----
+# #Full drug set
+# dss_github_enserink_full_set_drugs_for_heatmap <- pivot_wider(subset(dss_github_enserink_full_set_drugs, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
+# dss_github_enserink_full_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_full_set_drugs_for_heatmap)
+# rownames(dss_github_enserink_full_set_drugs_for_heatmap) <- dss_github_enserink_full_set_drugs_for_heatmap$drug
+# dss_github_enserink_full_set_drugs_for_heatmap$drug <- NULL
+# dss_github_enserink_full_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_full_set_drugs_for_heatmap)
+# heatmap_plots(dss_github_enserink_full_set_drugs_for_heatmap, NaN, fontsize = 26, fontsize_row = FALSE, filename = 'Desktop/UiO/Project 1/Figures/V3/Oslo_github_calculations_full_drug_set.pdf', title = "DSS2 Heatmap of all drugs \n Oslo", c_method= "ward.D2", height=200, width=80)
+# complexheatmap_plots(as.matrix(dss_github_enserink_full_set_drugs_for_heatmap), NaN, fontsize = 26, fontsize_row = FALSE, filename = 'Desktop/UiO/Project 1/Figures/V3/Oslo_github_calculations_full_drug_set_complex.pdf', title = "DSS2 Heatmap of all drugs \n Oslo", c_method= "ward.D2", height=200, width=80)
+# 
+# 
+# #Common drugs 
+# dss_github_enserink_common_set_drugs_for_heatmap <- pivot_wider(subset(dss_enserink_common_drugs, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
+# dss_github_enserink_common_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_common_set_drugs_for_heatmap)
+# rownames(dss_github_enserink_common_set_drugs_for_heatmap) <- dss_github_enserink_common_set_drugs_for_heatmap$drug
+# dss_github_enserink_common_set_drugs_for_heatmap$drug <- NULL
+# dss_github_enserink_common_set_drugs_for_heatmap <- as.data.frame(dss_github_enserink_common_set_drugs_for_heatmap)
+# heatmap_plots(dss_github_enserink_common_set_drugs_for_heatmap, NaN, fontsize = 26, fontsize_row = FALSE, filename = 'Desktop/UiO/Project 1/Figures/V2_prepare_article/Enserink_github_calculations_common_drugs.pdf', title = "Heatmap common drugs - Enserink")
+# 
+# 
+# #BeatAML ----
+# #full drug set
+# beat_aml_for_heatmap <- pivot_wider(subset(dss_github_beat_aml, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
+# beat_aml_for_heatmap <- as.data.frame(beat_aml_for_heatmap)
+# rownames(beat_aml_for_heatmap) <- beat_aml_for_heatmap$drug
+# beat_aml_for_heatmap$drug <- NULL
+# beat_aml_for_heatmap <- as.data.frame(beat_aml_for_heatmap)
+# # # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_for_heatmap, 1, function(row) sum(is.na(row)))
+# # #Remove row if total missing in row is higher than 200
+# df_filtered <- beat_aml_for_heatmap[missing_per_row <= 200, ]
+# # # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_for_heatmap, 2, function(row) sum(is.na(row)))
+# # #Remove col if total missing in col is higher than 100
+# df_filtered <- df_filtered[,missing_per_col <= 100]
+# # #beat_aml_for_heatmap[is.na(beat_aml_for_heatmap)] <- 0
+# heatmap_plots(data.frame(df_filtered),NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V3/BeatAML_github_calculations_full_drug_set.pdf", title = "DSS2 Heatmap of all drugs \n BeatAML", c_method= "ward.D2", height=70, width=310)
+# complexheatmap_plots(as.matrix(df_filtered), fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/draw/BeatAML_github_calculations_full_drug_set_complex.pdf", title = "DSS2 Heatmap of all drugs \n BeatAML", c_method= "ward.D2", height=45, width=140)
+# 
+# #Common drugs
+# beat_aml_for_heatmap_common <- pivot_wider(subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2)), names_from = Patient.num, values_from = DSS2)
+# beat_aml_for_heatmap_common <- as.data.frame(beat_aml_for_heatmap_common)
+# rownames(beat_aml_for_heatmap_common) <- beat_aml_for_heatmap_common$drug
+# beat_aml_for_heatmap_common$drug <- NULL
+# beat_aml_for_heatmap_common <- as.data.frame(beat_aml_for_heatmap_common)
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_for_heatmap_common, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# df_filtered <- beat_aml_for_heatmap_common[missing_per_row <= 500, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_for_heatmap_common, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# df_filtered <- beat_aml_for_heatmap_common[,missing_per_col <= 45]
+# 
+# subset(dss_beat_aml_common_drugs, is.finite(DSS2))
+# heatmap_plots(data.frame(beat_aml_for_heatmap_common),NaN, fontsize = 26, filename = "Desktop/UiO/Project 1/Figures/V2_prepare_article/BeatAML_github_calculations_common_drugs.pdf", title = "Heatmap common drugs - BeatAML", c_row=FALSE, c_col=FALSE)
+# #############################################################################################################################################################################################
+# 
+# 
+# #############################################################################################################################################################################################
+# #Heatmap two datasets ----
+# #FIMM-Karolinska ----
+# fimm_karolinska<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, DSS2,lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2,lab)))
+# 
+# a_col <- unique(subset(fimm_karolinska, select = c(lab, Patient.num)))
+# a_col <- as.data.frame(a_col)
+# rownames(a_col) <- a_col$Patient.num
+# a_col$Patient.num <- NULL
+# 
+# fimm_karolinska$lab <- NULL
+# all_dss_for_heatmap <- pivot_wider(fimm_karolinska, names_from = Patient.num, values_from = dss2)
+# all_dss_for_heatmap <- as.data.frame(all_dss_for_heatmap)
+# rownames(all_dss_for_heatmap) <- all_dss_for_heatmap$drug
+# all_dss_for_heatmap$drug <- NULL
+# all_dss_for_heatmap <- as.data.frame(all_dss_for_heatmap)
+# heatmap_plots(all_dss_for_heatmap,a_col, fontsize_row = TRUE, filename = "Desktop/UiO/Project 1/Figures/fimm_karolinska_bæææ.pdf")
+# 
+# #BeatAML-Enserink ----
+# beat_aml_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# 
+# a_col <- unique(subset(beat_aml_enserink, select = c(lab, Patient.num)))
+# a_col <- as.data.frame(a_col)
+# rownames(a_col) <- a_col$Patient.num
+# 
+# beat_aml_enserink$lab <- NULL
+# beat_aml_enserink_for_heatmap <- pivot_wider(beat_aml_enserink, names_from = Patient.num, values_from = dss2)
+# beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
+# rownames(beat_aml_enserink_for_heatmap) <- beat_aml_enserink_for_heatmap$drug
+# beat_aml_enserink_for_heatmap$drug <- NULL
+# beat_aml_enserink_for_heatmap$lab <- NULL
+# beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
+# 
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap[missing_per_row <= 200, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_enserink_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap_filtered[,missing_per_col <= 30]
+# #beat_aml_for_heatmap[is.na(beat_aml_for_heatmap)] <- 0
+# dss_long <- as.data.frame(beat_aml_enserink_for_heatmap_filtered)
+# #dss_long$drug <- rownames(dss_long)
+# dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'Patient 100':'2752_BA3448D_BA3448R', factor_key=TRUE) %>% as.data.frame()
+# a_col <- as.data.frame(a_col)
+# a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
+# a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
+# rownames(a) <- a$patient_id
+# a$patient_id <- NULL
+# a <- as.data.frame(a)
+# 
+# a_color = list(
+#   lab = c("BeatAML" = "#F4A582", "Enserink" = "#92C5DE"))
+# 
+# heatmap_plots(as.data.frame(beat_aml_enserink_for_heatmap_filtered), a_col=a, a_color = a_color, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/enserink_beat_aml.pdf")
+# 
+# #FIMM-Enserink ----
+# fimm_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# 
+# a_col <- unique(subset(fimm_enserink, select = c(lab, Patient.num)))
+# a_col <- as.data.frame(a_col)
+# rownames(a_col) <- a_col$Patient.num
+# a_col$Patient.num <- NULL
+# 
+# fimm_enserink$lab <- NULL
+# fimm_enserink_for_heatmap <- pivot_wider(fimm_enserink, names_from = Patient.num, values_from = dss2)
+# fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
+# rownames(fimm_enserink_for_heatmap) <- fimm_enserink_for_heatmap$drug
+# fimm_enserink_for_heatmap$drug <- NULL
+# fimm_enserink_for_heatmap$lab <- NULL
+# fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
+# 
+# heatmap_plots(fimm_enserink_for_heatmap,a_col, fontsize_row = TRUE, filename = "Desktop/UiO/Project 1/Figures/fimm_enserink.pdf")
+# 
+# #Karolinska-Enserink ----
+# karolinska_enserink<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, DSS2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, DSS2,lab)))
+# 
+# a_col <- unique(subset(karolinska_enserink, select = c(lab, Patient.num)))
+# a_col <- as.data.frame(a_col)
+# rownames(a_col) <- a_col$Patient.num
+# a_col$Patient.num <- NULL
+# 
+# karolinska_enserink$lab <- NULL
+# karolinska_enserink_for_heatmap <- pivot_wider(karolinska_enserink, names_from = Patient.num, values_from = DSS2)
+# karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
+# rownames(karolinska_enserink_for_heatmap) <- karolinska_enserink_for_heatmap$drug
+# karolinska_enserink_for_heatmap$drug <- NULL
+# karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
+# heatmap_plots(karolinska_enserink_for_heatmap,a_col, fontsize_row = TRUE, filename = "Desktop/UiO/Project 1/Figures/karolinska_Enserink_test.pdf", height = 70, width = 130)
+# 
+# #FIMM-BeatML ----
+# beat_aml_FIMM <- rbind(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# 
+# a_col <- unique(subset(beat_aml_FIMM, select = c(lab, Patient.num)))
+# a_col <- as.data.frame(a_col)
+# rownames(a_col) <- a_col$Patient.num
+# 
+# beat_aml_FIMM$lab <- NULL
+# beat_aml_FIMM_for_heatmap <- pivot_wider(beat_aml_FIMM, names_from = Patient.num, values_from = dss2)
+# beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
+# rownames(beat_aml_FIMM_for_heatmap) <- beat_aml_FIMM_for_heatmap$drug
+# beat_aml_FIMM_for_heatmap$drug <- NULL
+# beat_aml_FIMM_for_heatmap$lab <- NULL
+# beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
+# 
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_FIMM_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap[missing_per_row <= 200, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_FIMM_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap_filtered[,missing_per_col <= 25]
+# #beat_aml_FIMM_for_heatmap_filtered[is.na(beat_aml_FIMM_for_heatmap_filtered)] <- 0
+# dss_long <- as.data.frame(beat_aml_FIMM_for_heatmap_filtered)
+# #dss_long$drug <- rownames(dss_long)
+# dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'BERG_470012_03022016_9999_BM':'2554_BA2594D_BA2594R', factor_key=TRUE) %>% as.data.frame()
+# a_col <- as.data.frame(a_col)
+# a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
+# a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
+# rownames(a) <- a$patient_id
+# a$patient_id <- NULL
+# a <- as.data.frame(a)
+# 
+# heatmap_plots(as.data.frame(beat_aml_FIMM_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/FIMM_beat_aml.pdf")
+# 
+# 
+# #Karolinska-BeatAML ----
+# beat_aml_karolinska <- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# 
+# a_col <- unique(subset(beat_aml_karolinska, select = c(lab, Patient.num)))
+# a_col <- as.data.frame(a_col)
+# rownames(a_col) <- a_col$Patient.num
+# 
+# beat_aml_karolinska$lab <- NULL
+# beat_aml_karolinska_for_heatmap <- pivot_wider(beat_aml_karolinska, names_from = Patient.num, values_from = dss2)
+# beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
+# rownames(beat_aml_karolinska_for_heatmap) <- beat_aml_karolinska_for_heatmap$drug
+# beat_aml_karolinska_for_heatmap$drug <- NULL
+# beat_aml_karolinska_for_heatmap$lab <- NULL
+# beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
+# 
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_karolinska_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap[missing_per_row <= 200, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_karolinska_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap_filtered[,missing_per_col <= 25]
+# #beat_aml_karolinska_for_heatmap_filtered[is.na(beat_aml_karolinska_for_heatmap_filtered)] <- 0
+# dss_long <- as.data.frame(beat_aml_karolinska_for_heatmap_filtered)
+# #dss_long$drug <- rownames(dss_long)
+# dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'AML_001':'2554_BA2594D_BA2594R', factor_key=TRUE) %>% as.data.frame()
+# a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
+# a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
+# rownames(a) <- a$patient_id
+# a$patient_id <- NULL
+# a <- as.data.frame(a)
+# 
+# heatmap_plots(as.data.frame(beat_aml_karolinska_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/Karolinska_beat_aml.pdf")
+###################################################################################################################################################################################################################################
+#PCA plot two datasets ----
+#FIMM-Karolinska ----
+# fimm_karolinska<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2,lab)))
+# all_dss_for_heatmap <- pivot_wider(fimm_karolinska, names_from = drug, values_from = dss2)
+# all_dss_for_heatmap <- as.data.frame(all_dss_for_heatmap)
+# 
+# na_counts <- colSums(is.na(all_dss_for_heatmap))
+# df_clean <-all_dss_for_heatmap[, na_counts < 30]
+# df_clean <- df_clean[complete.cases(df_clean), ]
+# dim(df_clean)
+# 
+# all_dss_for_heatmap <- na.omit(df_clean)
+# pca_plots(all_dss_for_heatmap, title = "PCA Plot", "~/Desktop/UiO/Project 1/Figures/FIMM_Karolinska.png", 'Patient.num', 'lab')
+# 
+# #Enserink-BeatAML ----
+# beat_aml_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# beat_aml_enserink_for_heatmap <- pivot_wider(beat_aml_enserink, names_from = drug, values_from = dss2)
+# beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
+# rownames(beat_aml_enserink_for_heatmap) <- beat_aml_enserink_for_heatmap$drug
+# beat_aml_enserink_for_heatmap$drug <- NULL
+# beat_aml_enserink_for_heatmap <- as.data.frame(beat_aml_enserink_for_heatmap)
+# 
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap[missing_per_row <= 30, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_enserink_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_enserink_for_heatmap_filtered <- beat_aml_enserink_for_heatmap_filtered[,missing_per_col <= 200]
+# beat_aml_enserink_for_heatmap_filtered <- na.omit(beat_aml_enserink_for_heatmap_filtered)
+# #all_dss_for_heatmap <- na.omit(beat_aml_enserink_for_heatmap_filtered)
+# pca_plots(beat_aml_enserink_for_heatmap_filtered, title = "PCA Plot - Enserink and BeatAML", "~/Desktop/UiO/Project 1/Figures/Enserink_BeatAML_PCA_Plot.png", 'Patient.num', 'lab')
+# 
+# #FIMM-Enserink ----
+# fimm_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# 
+# fimm_enserink_for_heatmap <- pivot_wider(fimm_enserink, names_from = drug, values_from = dss2)
+# fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
+# rownames(fimm_enserink_for_heatmap) <- fimm_enserink_for_heatmap$drug
+# fimm_enserink_for_heatmap$drug <- NULL
+# fimm_enserink_for_heatmap <- as.data.frame(fimm_enserink_for_heatmap)
+# 
+# # Check how many values are missing in each col
+# missing_per_col <- apply(fimm_enserink_for_heatmap, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# fimm_enserink_for_heatmap <- fimm_enserink_for_heatmap[,missing_per_col <= 100]
+# fimm_enserink_for_heatmap <- na.omit(fimm_enserink_for_heatmap)
+# pca_plots(fimm_enserink_for_heatmap, title = "PCA Plot - Enserink and FIMM", "~/Desktop/UiO/Project 1/Figures/Enserink_FIMM_PCA_Plot.png", 'Patient.num', 'lab')
+# 
+# 
+# #Karolinska-Enserink ----
+# karolinska_enserink<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, dss2,lab)))
+# 
+# karolinska_enserink_for_heatmap <- pivot_wider(karolinska_enserink, names_from = drug, values_from = dss2)
+# karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
+# rownames(karolinska_enserink_for_heatmap) <- karolinska_enserink_for_heatmap$drug
+# karolinska_enserink_for_heatmap$drug <- NULL
+# karolinska_enserink_for_heatmap <- as.data.frame(karolinska_enserink_for_heatmap)
+# 
+# # Check how many values are missing in each col
+# missing_per_col <- apply(karolinska_enserink_for_heatmap, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# karolinska_enserink_for_heatmap <- karolinska_enserink_for_heatmap[,missing_per_col <= 100]
+# karolinska_enserink_for_heatmap <- na.omit(karolinska_enserink_for_heatmap)
+# pca_plots(karolinska_enserink_for_heatmap, title = "PCA Plot - Karolinska and Enserink", "~/Desktop/UiO/Project 1/Figures/Enserink_Karolinska_PCA_Plot.png", 'Patient.num', 'lab')
+# 
+# 
+# #FIMM-BeatAML ----
+# beat_aml_FIMM <- rbind(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# beat_aml_FIMM <- subset(beat_aml_FIMM, drug != 'Sapanisertib')
+# beat_aml_FIMM_for_heatmap <- pivot_wider(beat_aml_FIMM, names_from = drug, values_from = dss2)
+# beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
+# rownames(beat_aml_FIMM_for_heatmap) <- beat_aml_FIMM_for_heatmap$Patient.num
+# beat_aml_FIMM_for_heatmap <- as.data.frame(beat_aml_FIMM_for_heatmap)
+# 
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_FIMM_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap[missing_per_row <= 30, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_FIMM_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_FIMM_for_heatmap_filtered <- beat_aml_FIMM_for_heatmap_filtered[,missing_per_col <= 200]
+# beat_aml_FIMM_for_heatmap_filtered <- na.omit(beat_aml_FIMM_for_heatmap_filtered)
+# pca_plots(beat_aml_FIMM_for_heatmap_filtered, title = "PCA Plot - BeatAML and FIMM", "~/Desktop/UiO/Project 1/Figures/FIMM_BeatAML_PCA_Plot.png", 'Patient.num', 'lab')
+# 
+# 
+# #Karolinska-BeatAML ----
+# beat_aml_karolinska <- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# beat_aml_karolinska <- subset(beat_aml_karolinska, drug != 'Tanespimycin')
+# beat_aml_karolinska_for_heatmap <- pivot_wider(beat_aml_karolinska, names_from = drug, values_from = dss2)
+# beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
+# rownames(beat_aml_karolinska_for_heatmap) <- beat_aml_karolinska_for_heatmap$Patient.num
+# beat_aml_karolinska_for_heatmap <- as.data.frame(beat_aml_karolinska_for_heatmap)
+# 
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_karolinska_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap[missing_per_row <= 30, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_karolinska_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_karolinska_for_heatmap_filtered <- beat_aml_karolinska_for_heatmap_filtered[,missing_per_col <= 200]
+# beat_aml_karolinska_for_heatmap_filtered <- na.omit(beat_aml_karolinska_for_heatmap_filtered)
+# pca_plots(beat_aml_karolinska_for_heatmap_filtered, title = "PCA Plot - BeatAML and FIMM", "~/Desktop/UiO/Project 1/Figures/Karolinska_BeatAML_PCA_Plot.png", 'Patient.num', 'lab')
+#############################################################################################################################################################################################
+# #Wilcoxon rank sum test - see weather there is a difference between the dss values for the two datasets----
+# #Enserink-BeatAML ----
+# #Common drugs
+# beat_aml_enserink_w <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# beat_aml_enserink_w$binary_lab<- ifelse(beat_aml_enserink_w$lab == "Enserink", 1, 0)
+# #ighv both single and combination drug----
+# beat_aml_enserink_wilcoxon_test <- wilcox_test(beat_aml_enserink_w, 'drug', "binary_lab", 'dss2')
+# # Create volcano plot using the result dataframe
+# volcano_beat_aml_enserink <- create_volcano_plot(beat_aml_enserink_wilcoxon_test, title ='Volcano Plot for IGHV mutations', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/enserink_beat_aml_wilcoxon.png')
+# # Print the volcano plot
+# print(volcano_beat_aml_enserink)
+# 
+# 
+# fimm_enserink <- rbind(subset(dss_fimm, select = c(drug, Patient.num, dss2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, dss2,lab)))
+# 
+# fimm_enserink$binary_lab<- ifelse(fimm_enserink$lab == "Enserink", 1, 0)
+# #ighv both single and combination drug----
+# ighv_df <- wilcox_test(fimm_enserink, 'drug', "binary_lab", 'dss2')
+# # Create volcano plot using the result dataframe
+# volcano_plot_ighv <- create_volcano_plot(ighv_df, title ='Volcano Plot for FIMM Enserink', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/fimm_Enserink.png')
+# # Print the volcano plot
+# print(volcano_plot_ighv)
+# 
+# 
+# #FIMM-Karolinska ----
+# fimm_karolinska<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2,lab)))
+# fimm_karolinska$binary_lab<- ifelse(fimm_karolinska$lab == "FIMM", 1, 0)
+# fimm_karolinska <- na.omit(fimm_karolinska)
+# binary_lab_fimm_karolinska <- wilcox_test(subset(fimm_karolinska, drug != 'Sapanisertib'), 'drug', "binary_lab", 'dss2')
+# # Create volcano plot using the result dataframe
+# volcano_plot_fimm_karolinska <- create_volcano_plot(binary_lab_fimm_karolinska, title ='Volcano Plot Wilcoxon rank sum test - DSS2 Karolinska vs FIMM', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM_Karolinska_vulcano_plot.png')
+# # Print the volcano plot
+# print(volcano_plot_fimm_karolinska)
+# 
+# #FIMM-Enserink ----
+# fimm_enserink <- rbind(subset(dss_github_enserink, select = c(drug, Patient.num, dss2, lab)), subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# fimm_enserink$binary_lab<- ifelse(fimm_enserink$lab == "FIMM", 1, 0)
+# fimm_enserink <- na.omit(fimm_enserink)
+# binary_lab_fimm_enserink <- wilcox_test(fimm_enserink, 'drug', "binary_lab", 'dss2')
+# # Create volcano plot using the result dataframe
+# volcano_plot_fimm_enserink <- create_volcano_plot(binary_lab_fimm_enserink, title ='Volcano Plot Wilcoxon rank sum test - DSS2 Enserink vs FIMM', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM_Enserink_vulcano_plot.png')
+# # Print the volcano plot
+# print(volcano_plot_fimm_enserink)
+# 
+# 
+# #Karolinska-Enserink ----
+# karolinska_enserink<- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2,lab)), subset(dss_github_enserink, select = c(drug, Patient.num, dss2,lab)))
+# karolinska_enserink$binary_lab<- ifelse(karolinska_enserink$lab == "Enserink", 1, 0)
+# karolinska_enserink <- na.omit(karolinska_enserink)
+# 
+# binary_lab_karolinska_enserink <- wilcox_test(karolinska_enserink, 'drug', "binary_lab", 'dss2')
+# # Create volcano plot using the result dataframe
+# volcano_plot_karolinska_enserink <- create_volcano_plot(binary_lab_karolinska_enserink, title ='Volcano Plot Wilcoxon rank sum test - DSS2 Karolinska vs Enserink', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska_Enserink_vulcano_plot.png')
+# # Print the volcano plot
+# print(volcano_plot_karolinska_enserink)
+# 
+# #FIMM-BeatAML ----
+# beat_aml_FIMM <- rbind(subset(dss_fimm_common_drugs, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# beat_aml_FIMM$binary_lab<- ifelse(beat_aml_FIMM$lab == "FIMM", 1, 0)
+# beat_aml_FIMM <- na.omit(beat_aml_FIMM)
+# 
+# binary_lab_beat_aml_FIMM <- wilcox_test(beat_aml_FIMM, 'drug', "binary_lab", 'dss2')
+# # Create volcano plot using the result dataframe
+# volcano_plot_beat_aml_FIMM <- create_volcano_plot(binary_lab_beat_aml_FIMM, title ='Volcano Plot Wilcoxon rank sum test - DSS2 FIMM vs BeatAML', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM_BeatAML_vulcano_plot.png')
+# # Print the volcano plot
+# print(volcano_plot_beat_aml_FIMM)
+# 
+# 
+# #Karolinska-BeatAML ----
+# beat_aml_karolinska <- rbind(subset(dss_karolinska, select = c(drug, Patient.num, dss2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, dss2, lab)))
+# beat_aml_karolinska$binary_lab<- ifelse(beat_aml_karolinska$lab == "Karolinska", 1, 0)
+# beat_aml_karolinska <- na.omit(beat_aml_karolinska)
+# 
+# binary_lab_beat_aml_karolinska <- wilcox_test(beat_aml_karolinska, 'drug', "binary_lab", 'dss2')
+# # Create volcano plot using the result dataframe
+# volcano_plot_beat_aml_karolinska <- create_volcano_plot(binary_lab_beat_aml_karolinska, title ='Volcano Plot Wilcoxon rank sum test - DSS2 BeatAML vs Karolinska', filename='/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska_BeatAML_vulcano_plot.png')
+# # Print the volcano plot
+# print(volcano_plot_beat_aml_karolinska)
+# #############################################################################################################################################################################################

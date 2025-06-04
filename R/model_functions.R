@@ -231,12 +231,13 @@ model_results <- function(models, group = "Response_metric", data_frame_org, sca
   
   rownames(df) <- NULL
   df <- df %>% mutate(Fixed_Effect_Term = case_when(Fixed_Effect_Term ==  "positive_controlBzCl" ~ "Positive Control: BzCl + Doses: 5 \n+ Readout: CellTiter-Glo\n+ Cell Counting: Trypan blue", 
-                                                    Fixed_Effect_Term ==  "time_until_sample_usageHandled within 2-72 hours" ~ "Time until sample usage > 2h",
+                                                    Fixed_Effect_Term ==  "time_until_sample_usageHandled within 2-72 hours" ~ "Time until sample usage >2h",
+                                                    Fixed_Effect_Term ==  "time_until_sample_usageHandled within 24 hours" ~ "Time until sample usage < 24h",
                                                     Fixed_Effect_Term ==  "mediumMononuclear cell medium" ~ "Medium: MCM",
                                                     Fixed_Effect_Term ==  "mediumRPMI + fetal bovine serum (FBS) (10%)" ~ "Medium: RPMI + FBS",
                                                     Fixed_Effect_Term ==  "microenvironmental_stimuliNone" ~ "Microenvironmental stimuli: None",
                                                     Fixed_Effect_Term ==  "microenvironmental_stimulitransiently cultured with feeder cells, activate samples with autologous BM T helper cells in the presence of IL-2 and a T-cell expansion cocktail" ~ "Microenvironmental Stimuli: \nCo-culture with activation",
-                                                    Fixed_Effect_Term ==  "plate_readerPherastar, Cytation5, Insight, Tecan" ~ "Plate Reader: Pherastar",
+                                                    Fixed_Effect_Term ==  "plate_readerPherastar, Cytation5, Insight, Tecan" ~ "Plate Reader: Pherastar\n or Cytation5",
                                                     Fixed_Effect_Term ==  "centrifugation_procedureLymphoPrepTM gradient centrifugation " ~ "Centrifugation Procedure: \nLymphoPrep\u2122 gradient",
                                                     Fixed_Effect_Term ==  "centrifugation_procedureSupernatant isolation at 300g 10min, density centrifugation at 400g for 20min without brake, afterwards always 300g 5 min" ~ "Centrifugation Procedure: 2ᵇ",
                                                     Fixed_Effect_Term ==  "cells5000" ~ "Number of Cells per Well: 5000",
@@ -247,8 +248,8 @@ model_results <- function(models, group = "Response_metric", data_frame_org, sca
                                                     Fixed_Effect_Term ==  "plate_readerEnSight" ~ "Plate Reader: EnSight",
                                                     TRUE ~ Fixed_Effect_Term))
 
-  df <- df %>% mutate(ref_group = case_when(ref_group ==  "a drug combination of flavopiridol, staurosporine and velcade" ~ "Positive Control: drug combination + Doses: 7 \n+ Readout: CellTiter96\n+ Cell Counnting: Optical density     ", 
-                                            ref_group ==  "1-2h after receiving" ~ "Time until sample usage < 2h",
+  df <- df %>% mutate(ref_group = case_when(ref_group ==  "a drug combination of flavopiridol, staurosporine and velcade" ~ "Positive Control: drug combination + Doses: 7 \n+ Readout: CellTiter96\n+ Cell Counting: Optical density     ", 
+                                            ref_group ==  "1-2h after receiving" ~ "Time until sample usage <2h",
                                             ref_group ==  "HS-5 conditioned medium" ~ "HS-5 CM",
                                             ref_group ==  "HS-5 CM" ~ "HS-5 CM",
                                             ref_group ==  "Ficoll-Paque centrifugation" ~ "Ficoll-Paque",

@@ -96,6 +96,9 @@ karolinska_sample_info <- karolinska_sample_info %>% mutate(Patient.num = paste0
 dss_karolinska_github <- merge(karolinska_sample_info, dss_karolinska_github, by = "Patient.num")
 write_csv(as.data.frame(unique(karolinska$Patient.num)), '~/Desktop/UiO/Project 1/patient_ids_for_flora.csv')
 
+karolinska_na_values <- subset(dss_karolinska_github, select = c("Patient.num", "Disease.status", "Tissue", "sample", "DSS2")) %>% group_by(Patient.num, Disease.status, Tissue, sample) %>% dplyr::summarize(avg_dss2 = mean(DSS2))
+
+
 
 #Enserink data 
 dss_github_enserink_full_set_drugs <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_enserink_full_drug_set_testing.csv')
@@ -116,9 +119,14 @@ enserink_sample_annotation[is.na(enserink_sample_annotation$Disease.status),]$Di
 enserink_sample_annotation$Disease.status <- gsub('relapse', 'Relapse', enserink_sample_annotation$Disease.status)
 enserink_sample_annotation$Disease.status <- gsub('remission2', 'remission', enserink_sample_annotation$Disease.status)
 enserink_sample_annotation$sample <- gsub('Fresh', 'fresh', enserink_sample_annotation$sample)
-enserink_sample_annotation <- enserink_sample_annotation %>% mutate(Cells1 = ifelse(Cells1 > 6000, "10000", "5000"))
-unique(enserink_sample_annotation$sample)
+enserink_sample_annotation <- enserink_sample_annotation %>% mutate(Cells1 = case_when(Cells1 > 5000 ~"10000", 
+                                                                                       Cells1 == 5000 ~ "5000", 
+                                                                                       Cells1 < 5000 ~ NA,
+                                                                                       TRUE ~ NA))
+unique(enserink_sample_annotation$Cells1)
+enserink_sample_annotation %>% distinct(Patient.num, Cells1) %>% group_by(Cells1) %>% dplyr:: summarize(c = n())
 count(enserink_sample_annotation[enserink_sample_annotation$Disease.status == 'Relapse',]$Disease.status)
+
 
 
 dss_github_enserink_full_set_drugs <- merge(enserink_sample_annotation, dss_github_enserink_full_set_drugs, by = "Patient.num")
@@ -307,7 +315,7 @@ experimental_var <- read_delim('~/Desktop/UiO/Project 1/Data/Initial cleansing/e
 experimental_var[experimental_var$lab == 'FIMM',]$lab <- 'Helsinki'
 experimental_var[experimental_var$lab == 'Enserink',]$lab <- 'Oslo'
 experimental_var[experimental_var$lab == 'Helsinki','medium'] <- NA
-unique(experimental_var$positive_control)
+unique(experimental_var$time_until_sample_usage)
 
 #experimental_var <- as.data.frame(experimental_var)
 #experimental_var[experimental_var$lab == 'FIMM','nr_positive_control'] <- (8+10)/2
@@ -374,6 +382,8 @@ all_datasets_v2$Disease.status <- gsub('Unknown', NA, all_datasets_v2$Disease.st
 all_datasets_v2$sample <- gsub('Cryopreserved', 'frozen', all_datasets_v2$sample)
 all_datasets_v2$Tissue <- gsub('Leukapheresis', 'Blood', all_datasets_v2$Tissue)
 unique(all_datasets_v2$cell_counting_method)
+
+all_datasets_v2 %>% group_by(lab, cells) %>% dplyr::summarize(c = n())
 
 all_response_metrics <- rbind(subset(dss_karolinska_common_drugs,select=-c(cohort, DSRT)),
                               subset(dss_enserink_common_drugs, select=-c(Cells1, Plate_reader1, Column2, Column1)), 
@@ -2059,7 +2069,7 @@ model_diagnostics(mixed_model_plate_reader_box_cox_scaled_re_intercept, "/Users/
 ####----Table of crossed re random intercept----
 #df <- df %>% mutate(corrected_p_value = ifelse(df$corrected_p_value == '0.0000', '<0.0001', as.character(df$corrected_p_value)))
 
-re_intercept_models <-c(mixed_model_time_until_sample_usage_box_cox_scaled_re_intercept, mixed_model_medium_box_cox_scaled_re_intercept, mixed_model_cells_box_cox_scaled_re_intercept, mixed_model_micro_env_stimuli_box_cox_scaled_re_intercept, mixed_model_sensitivity_readout_and_positive_control_box_cox_scaled_re_intercept, mixed_model_centrifugation_procedure_box_cox_scaled_re_intercept, mixed_model_plate_reader_box_cox_scaled_re_intercept)
+re_intercept_models <-c(mixed_model_time_until_sample_usage_box_cox_scaled_re_intercept, mixed_model_medium_box_cox_scaled_re_intercept, mixed_model_cells_box_cox_scaled_re_intercept, mixed_model_sensitivity_readout_and_positive_control_box_cox_scaled_re_intercept, mixed_model_centrifugation_procedure_box_cox_scaled_re_intercept, mixed_model_plate_reader_box_cox_scaled_re_intercept)
 df_re_intercept_models <- model_results(re_intercept_models, data_frame_org = all_datasets_v2)
 df_re_intercept_models_backup <- df_re_intercept_models
 df_re_intercept_models <- df_re_intercept_models_backup
@@ -2108,7 +2118,7 @@ df_re_intercept_models$`Experimental Variable` <- df_re_intercept_models$`Fixed 
 #df_re_intercept_models <- df_re_intercept_models %>% mutate(`Corrected p Value` = ifelse(df_re_intercept_models$`Corrected p Value` == '0.0000', '<0.0001', as.character(df_re_intercept_models$`Corrected p Value`)))
 df_re_intercept_models$`Reference Group` <- df_re_intercept_models$`Ref Group`
 df_re_intercept_models <- df_re_intercept_models %>% mutate(`Reference Condition` = case_when(`Reference Group` ==  "a drug combination of flavopiridol, staurosporine and velcade" ~ "Positive Control: drug combination + Doses: 7 \n+ Readout: CellTiter96     ", 
-                                                                                  `Reference Group` ==  "1-2h after receiving" ~ "Time until sample usage < 2h",
+                                                                                  `Reference Group` ==  "1-2h after receiving" ~ "Time until sample usage <2h",
                                                                                   `Reference Group` ==  "HS-5 conditioned medium" ~ "HS-5 CM",
                                                                                   `Reference Group` ==  "HS-5 CM" ~ "HS-5 CM",
                                                                                   `Reference Group` ==  "Ficoll-Paque centrifugation" ~ "Ficoll-Paque",
@@ -2277,7 +2287,7 @@ scaled_p <- gtable::gtable_filter(p, pattern = ".*", trim = TRUE)  # Keep all gr
 scaled_p$widths <- scaled_p$widths * scale_width
 scaled_p$heights <- scaled_p$heights * scale_height
 
-png('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/Forest_plot_DSS2_v3.png', height = 16, width = 46, unit = "cm", res = 300)
+png('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/v1/Forest_plot_DSS2.png', height = 16, width = 46, unit = "cm", res = 300)
 grid.newpage()
 grid.draw(scaled_p)
 dev.off()
@@ -3194,6 +3204,7 @@ heat_g <- grid.grabExpr(plot(
 combatch_all_datasets_heatmap_avg <- combatch_all_datasets %>% group_by(Patient.num) %>% dplyr::summarize('Average ComBat' = mean(combatch))
 ppca_data_metrics <- ppca_data_metrics %>% left_join(combatch_all_datasets_heatmap_avg, by = 'Patient.num')
 ppca_data_metrics$`Average ComBat` <- as.numeric(ppca_data_metrics$`Average ComBat`)
+
 combat_ppca_plot <- ggplot(as.data.frame(ppca_data_metrics), aes(x = PC1, y = PC2, color = `Average ComBat`)) +
   # 1st Category (A)
   geom_point(aes(color = ifelse(lab == "Beat AML", `Average ComBat`, NA)), size = 4) +  
@@ -3504,8 +3515,7 @@ mixed_model_plate_reader_combatch <- lmer(combatch_boxcox_sclaed2 ~ plate_reader
 summary(mixed_model_plate_reader_combatch)
 
 #table 
-models <- c(mixed_model_time_until_sample_usage_combatch, mixed_model_medium_combatch, mixed_model_cells_combatch,
-            mixed_model_microenvironmental_stimuli_combatch, mixed_model_sensitivity_readout_combatch, 
+models <- c(mixed_model_time_until_sample_usage_combatch, mixed_model_medium_combatch, mixed_model_cells_combatch, mixed_model_sensitivity_readout_combatch, 
             mixed_model_centrifugation_procedure_combatch, 
             mixed_model_plate_reader_combatch)
 combat_models_df <- model_results(models, data_frame_org=combatch_all_datasets)
@@ -3628,7 +3638,7 @@ scaled_p_combat <- gtable::gtable_filter(p_combat, pattern = ".*", trim = TRUE) 
 scaled_p_combat$widths <- scaled_p_combat$widths * scale_width
 scaled_p_combat$heights <- scaled_p_combat$heights * scale_height
 
-png('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/Forest_plot_combat.png', height = 16, width = 46, unit = "cm", res = 300)
+png('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/V1/Forest_plot_combat.png', height = 16, width = 46, unit = "cm", res = 300)
 grid.newpage()
 grid.draw(scaled_p_combat)
 dev.off()
@@ -4309,7 +4319,7 @@ for (m in metrics[1:6]){
 #----Bar plot of all response scores ---- #############################################################
 # List of models and their names
 
-variables <- c("time_until_sample_usage", "medium", "cells", "microenvironmental_stimuli", "positive_control", "centrifugation_procedure", "plate_reader")
+variables <- c("time_until_sample_usage", "medium", "cells", "positive_control", "centrifugation_procedure", "plate_reader")
 metrics <- c("IC50", "DSS1", "DSS2", "DSS3", "auc_a", "AUC")
 #metrics <- c("IC50")
 models <- list()
@@ -4330,7 +4340,7 @@ for (m in metrics[1:6]){
     f <- as.formula(formula_str)
     model_name <- paste0(m, "_by_", v)
     models[[model_name]] <- lmer(f,all_response_metrics)
-    model_diagnostics(models[[model_name]], paste0("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/", m, "/", v, "/"), model_name = model_name_plot, metric = m) 
+    #model_diagnostics(models[[model_name]], paste0("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/", m, "/", v, "/"), model_name = model_name_plot, metric = m) 
     print(summary(models[[model_name]]))
   }
 }
@@ -4528,9 +4538,10 @@ class(p1_all_metric$grobs[[5]])
 p1_all_metric$grobs[[5]]$gp <- gpar(col="black",cex=2,fontfamily="Arial",fontsize=12,lineheight=1.2,alpha=1,font=2)
 p1_all_metric$grobs[[1]]$gp
 # p1_all_metric <- insert_text(p1_all_metric, text = expression("DSS"[2]), part = "header", row = 1, col = 4, before = TRUE, gp = gpar(fontface = "bold"))
-legend_index <- 190
+legend_index <- 174
 p1_all_metric$layout$t[21]
-p1_all_metric$layout$t[legend_index] <- 14 #nrow(p1_all_metric)       # or your desired row index
+legend_index <- which(p1_all_metric$layout$name == "legend")
+p1_all_metric$layout$t[legend_index] <- 12 #nrow(p1_all_metric)       # or your desired row index
 p1_all_metric$layout$b[legend_index] <- 15 #nrow(p1_all_metric)
 p1_all_metric$layout$l[legend_index] <- 4             # column 4
 p1_all_metric$layout$r[legend_index] <- 4
@@ -4543,7 +4554,7 @@ scaled_p1_all_metric
 
 
 
-png('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/Forest_plot_all_metric.png', height = 36, width = 56, unit = "cm", res = 300) #24.8 #height = 16, width = 46 ; height = 10, width = 28
+png('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/v1/Forest_plot_all_metric.png', height = 36, width = 56, unit = "cm", res = 300) #24.8 #height = 16, width = 46 ; height = 10, width = 28
 grid.newpage()
 grid.draw(scaled_p1_all_metric)
 dev.off()

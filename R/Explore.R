@@ -40,163 +40,39 @@ library(grid)
 library(ggplotify)
 library(ComplexHeatmap)
 library(pcaMethods)
+library(cluster)
+library(proxy)
+library(ggrepel)
+library(ggnewscale)
+
+#Figure output location
+figure_output <- 'Desktop/UiO/Project 1/Figures/New karolinska data/'
 
 #Import datset containing all metric responses
-
-karolinska_frosen <- karolinska_frosen %>% mutate(Patient.num = paste0(Patient.num, '_', sample)) %>% as.data.frame()
-
-
-#############################################################################################################################################################################################
-#Importing the datasets ----
-  #Enserink ----
-dss_github_enserink <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_enserink.csv')
-dss_github_enserink$lab <- 'Oslo'
-#colnames(dss_github_enserink)[colnames(dss_github_enserink) == "DSS2"] <- "dss2"
-#Enserink full drug set 
-dss_github_enserink_full_set_drugs <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_enserink_full_drug_set_testing.csv')
-
-  #BeatAML ----
-dss_github_beat_aml <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_beat_aml_full_drug_set_v1.csv')
-dss_github_beat_aml$lab <- 'Beat AML'
-
-  #Karolinska ----
-karolinska_dss2_org <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/karolinska_institute_dss2.csv')
-karolinska_dss2_org$...1 <- NULL
-karolinska_dss2 <- gather(karolinska_dss2_org, patient_id, dss2, 'AML_001':'AML_347', factor_key=TRUE)
-karolinska_dss2 <- as.data.frame(karolinska_dss2)
-colnames(karolinska_dss2)[colnames(karolinska_dss2) == "patient_id"] <- "Patient.num"
-
-###
-karolinska_fresh <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_karolinska_full_drug_set_fresh.csv')
-#updating karolindka dataset
-colnames(karolinska_fresh)[colnames(karolinska_fresh) == "DRUG_NAME"] <- "drug"
-colnames(karolinska_fresh)[colnames(karolinska_fresh) == "DSS"] <- "DSS2"
-#karolinska_fresh <- karolinska_fresh %>% mutate(Patient.num = paste(Patient.num, '_fresh'))
-karolinska_fresh$sample <- 'fresh'
-karolinska_fresh <- karolinska_fresh %>% mutate(Patient.num = paste0(Patient.num, '_', sample)) %>% as.data.frame()
-karolinska_frosen <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_karolinska_full_drug_set_frosen.csv')
-#updating karolindka dataset
-colnames(karolinska_frosen)[colnames(karolinska_frosen) == "DRUG_NAME"] <- "drug"
-colnames(karolinska_frosen)[colnames(karolinska_frosen) == "DSS"] <- "DSS2"
-#karolinska_frosen <- karolinska_frosen %>% mutate(Patient.num = paste(Patient.num, '_frozen'))
-karolinska_frosen$sample <- 'frozen'
-karolinska_frosen <- karolinska_frosen %>% mutate(Patient.num = paste0(Patient.num, '_', sample)) %>% as.data.frame()
-dss_karolinska_github <- rbind(karolinska_fresh, karolinska_frosen)
-dss_karolinska_github$lab <- 'Karolinska'
-dss_karolinska_github$Tissue <- NA
-dss_karolinska_github$Disease.status <- NA
-dss_karolinska_github <- dss_karolinska_github %>% mutate(Patient.num = paste0('k',dss_karolinska_github$Patient.num))
-dss_karolinska_github$drug[dss_karolinska_github$drug=='Chidamide'] <- 'Tucidinostat'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='GDC-0994'] <- 'Ravoxertinib'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='GSK525762'] <- 'Molibresib'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='KPT-8602'] <- 'Eltanexor'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='MLN-0128'] <- 'Sapanisertib'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='MLN1117'] <- 'Serabelisib'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='NVP-ABL001'] <- 'Asciminib'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='NVP-BGJ398'] <- 'Infigratinib'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='ONO-4059'] <- 'Tirabrutinib'
-dss_karolinska_github$drug[dss_karolinska_github$drug=='VX-745'] <- 'Neflamapimod'
-dss_karolinska_github <- subset(dss_karolinska_github, Patient.num != 'kAML_009_frozen')
-###
+all_response_metrics <- read_csv('~/Desktop/UiO/Project 1/Data/Response scores/all_response_metrics_all_labs.csv')
+all_response_metrics <- all_response_metrics[!is.na(all_response_metrics$Patient.num),]
+all_response_metrics <- all_response_metrics %>% mutate(drug = ifelse(drug == 'PONATINIB', 'Ponatinib', drug))
+all_response_metrics <- all_response_metrics %>% mutate(Patient.num = ifelse(lab == 'Karolinska', paste0(Patient.num, sample), Patient.num))
+all_response_metrics$drug <- tools::toTitleCase(all_response_metrics$drug)
 
 
-  #FIMM ----
-#Their calculations
-fimm_dss2 <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/fimm_drug_response.csv')
-fimm_dss2 <- gather(fimm_dss2, patient_id, dss2, 'AML_084_04':'Healthy_17', factor_key=TRUE)
-fimm_dss2 <- as.data.frame(fimm_dss2)
-colnames(fimm_dss2)[colnames(fimm_dss2) == "patient_id"] <- "Patient.num"
-
-#My calculations from the github package
-dss_github_fimm <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_fimm_full_drug_set.csv')
-
-  #Common drug names ----
-#Getting the common drugs across the 4 datasets
-common_drugs <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/common_drugnames_pubchem.csv")
-common_drugs$`Unnamed: 0_x` <- NULL
-common_drugs$`Unnamed: 0_y` <- NULL
-common_drugs$`Unnamed: 0` <- NULL
-
-  #Joining DSS calculations and common drug dataset ----
-#All datasets are left with the 47 common drugs after the join 
-dss_beat_aml_common_drugs <- inner_join(common_drugs, dss_github_beat_aml, by=c("beat_aml_drug_name"="drug"))
-colnames(dss_beat_aml_common_drugs)[colnames(dss_beat_aml_common_drugs) == "pubchem_drug_name"] <- "drug"
-dim(dss_beat_aml_common_drugs)
-
-dss_karolinska_common_drugs <- inner_join(common_drugs, dss_karolinska_github, by=c("karolinska_drug_name"="drug"))
-colnames(dss_karolinska_common_drugs)[colnames(dss_karolinska_common_drugs) == "pubchem_drug_name"] <- "drug"
-dss_karolinska_common_drugs$lab <- 'Karolinska'
-
-#Their calculations
-dss_fimm <- inner_join(common_drugs, fimm_dss2, by=c("fimm_drug_name"="Drug_name"))
-colnames(dss_fimm)[colnames(dss_fimm) == "pubchem_drug_name"] <- "drug"
-dss_fimm$lab <- 'Helsinki'
-
-#My calculations from the github package
-dss_fimm_common_drugs <- inner_join(common_drugs, dss_github_fimm, by=c("fimm_drug_name"="drug"))
-colnames(dss_fimm_common_drugs)[colnames(dss_fimm_common_drugs) == "pubchem_drug_name"] <- "drug"
-dss_fimm_common_drugs$lab <- 'Helsinki'
-
-#Enserink common drugs 
-dss_enserink_common_drugs <- inner_join(common_drugs, dss_github_enserink_full_set_drugs, by=c("enserink_drug_name"="drug"))
-colnames(dss_enserink_common_drugs)[colnames(dss_enserink_common_drugs) == "pubchem_drug_name"] <- "drug"
-dss_enserink_common_drugs$lab <- "Oslo"
-#############################################################################################################################################################################################
+#remove drug 001, RAD because there are only 3 patients tested for it in the Beat AML cohort
+all_response_metrics <- subset(all_response_metrics, drug != '001, RAD') %>% as.data.frame()
+#dataframe to wide format for the heatmap and ppca
+all_response_metrics_wide <- all_response_metrics[,c('Patient.num', 'drug', 'DSS2')] %>% pivot_wider(names_from = Patient.num, values_from = DSS2) %>% as.data.frame()
+rownames(all_response_metrics_wide) <- all_response_metrics_wide$drug
+all_response_metrics_wide$drug <- NULL
 
 
-
-
-#Heatmap all datasets ----
-names(dss_karolinska)[names(dss_karolinska) == "dss2"] <- "DSS2"
-names(dss_github_enserink)[names(dss_github_enserink) == "dss2"] <- "DSS2"
-
-beat_aml_karolinska <- rbind(subset(dss_karolinska_common_drugs, select = c(drug, Patient.num, DSS2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
-beat_aml_karolinska_FIMM <- rbind(beat_aml_karolinska, subset(dss_fimm_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
-beat_aml_karolinska_FIMM_enserink<- rbind(beat_aml_karolinska_FIMM, subset(dss_enserink_common_drugs, select = c(drug, Patient.num, DSS2,lab)))
-beat_aml_karolinska_FIMM_enserink <- beat_aml_karolinska_FIMM_enserink[!is.na(beat_aml_karolinska_FIMM_enserink$Patient.num),]
-beat_aml_karolinska_FIMM_enserink <- beat_aml_karolinska_FIMM_enserink %>% mutate(drug = ifelse(drug == 'PONATINIB', 'Ponatinib', drug))
-
-a_col <- unique(subset(beat_aml_karolinska_FIMM_enserink, select = c(lab, Patient.num)))
-a_col <- as.data.frame(a_col)
+#----Heatmap creation----
+a_col <- unique(subset(all_response_metrics, select = c(lab, Patient.num))) %>% as.data.frame()
 rownames(a_col) <- a_col$Patient.num
-beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != '001, RAD')
-beat_aml_karolinska_FIMM_enserink$lab <- NULL
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- pivot_wider(beat_aml_karolinska_FIMM_enserink, names_from = Patient.num, values_from = DSS2)
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
-rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- beat_aml_karolinska_FIMM_enserink_for_heatmap$drug
-beat_aml_karolinska_FIMM_enserink_for_heatmap$drug <- NULL
-beat_aml_karolinska_FIMM_enserink_for_heatmap$lab <- NULL
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
-#length(missing_per_row)
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap[missing_per_row <= 800, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered[,missing_per_col <= 25]
-#beat_aml_karolinska_for_heatmap_filtered[is.na(beat_aml_karolinska_for_heatmap_filtered)] <- 0
+a_col$Patient.num <- NULL
+a_col <- dplyr::rename(a_col, "Study" = "lab")
+a_col$Study <- factor(a_col$Study, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
 
-rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- tools::toTitleCase(rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap))
-dss_long <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
-#dss_long$drug <- rownames(dss_long)
-dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'kAML_001_fresh':'patient 29', factor_key=TRUE) %>% as.data.frame()
-a_col <- as.data.frame(a_col)
-a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
-a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
-#rownames(a) <- a$patient_id
-#a$patient_id <- NULL
-a <- as.data.frame(a)
-heatmap_plots(as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/V3/beat_aml_karolinska_FIMM_enserink1.pdf", title = "DSS2 Heatmap of all drugs", c_method= "ward.D2", height=40, width=460)
-complexheatmap_plots(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/draw/beat_aml_karolinska_FIMM_enserink_complex.pdf", title = "DSS2 Heatmap of all drugs", c_method= "ward.D2", height=40, width=460)
-length(rownames(a))
-ncol(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered)
-col_anno <- subset(a, patient_id != "AML_001" & patient_id != "AML_002", select="lab") %>% dplyr::rename(Lab = lab)
-col_anno$Lab <- factor(col_anno$Lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
-
-a_col_h <- ComplexHeatmap::HeatmapAnnotation(df = col_anno, annotation_legend_param = list(
-  title = "Lab",
+a_col_h <- ComplexHeatmap::HeatmapAnnotation(df = a_col, annotation_legend_param = list(
+  title = "Study",
   title_gp = gpar(fontsize = 11, fontface = "bold"),
   labels_gp = gpar(fontsize = 11),
   #grid_width = unit(10, "mm"),
@@ -204,24 +80,10 @@ a_col_h <- ComplexHeatmap::HeatmapAnnotation(df = col_anno, annotation_legend_pa
   legend_direction = "vertical",
   border = FALSE
 ),
-col = list(Lab= c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")), 
+col = list(Study= c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")), 
 show_annotation_name = FALSE
 )
-str(a)
-matrix_colnames <- colnames(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered[,-c(1,2)])
-annotation_rownames <- rownames(a)
-beat_aml_karolinska_FIMM_enserink_for_heatmap
 
-library(cluster)
-
-# Compute distance matrix with Gower’s method
-dist_mat <- daisy(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap), metric = "gower")
-
-# Perform clustering
-hclust_res <- hclust(dist_mat, method = "ward.D2")
-
-
-library(proxy)
 
 # Custom function for distance that ignores NAs
 dist_no_na <- function(x) {
@@ -231,24 +93,13 @@ dist_no_na <- function(x) {
   as.dist(d)
 }
 
-# Perform clustering while ignoring NAs
-row_clustering <- hclust(dist_no_na(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap)), method = "ward.D")
-col_clustering <- hclust(dist_no_na(t(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap))), method = "ward.D")
-
-ComplexHeatmap::Heatmap(
-  as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap), 
-  cluster_rows = row_clustering, 
-  cluster_columns = col_clustering, 
-  na_col = "grey")
-
-
-
-h <- ComplexHeatmap::Heatmap(
-  as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap),
+set.seed(2025)
+all_labs_dss2_heatmap <- ComplexHeatmap::Heatmap(
+  as.matrix(all_response_metrics_wide),
   name = "DSS2",  # Legend header
   cluster_rows = TRUE,
   cluster_columns = TRUE,
-  clustering_method_rows = "ward.D",
+  clustering_method_rows = "ward.D2",
   clustering_method_columns = "ward.D2",
   row_names_gp = gpar(fontsize = 9),  # Row font size 10
   column_names_gp = gpar(fontsize = 1),  # Column font size 10
@@ -261,7 +112,7 @@ h <- ComplexHeatmap::Heatmap(
   row_gap = unit(1, "cm"),             # Space between rows
   column_gap = unit(1, "cm"),          # Space between columns
   heatmap_legend_param = list(
-    title = "DSS2",  # Add header to the legend
+    title = expression("DSS"[2]),  # Add header to the legend
     title_gp = gpar(fontsize = 11, fontface = "bold"),  # Legend title font
     labels_gp = gpar(fontsize = 10), 
     grid_height = unit(8, "mm")
@@ -272,17 +123,23 @@ h <- ComplexHeatmap::Heatmap(
   column_title = "",
   column_title_gp = gpar(fontsize = 20, fontface = "bold"), 
   row_dend_width = unit(2, "cm"),
-  clustering_distance_rows = "euclidean",
+  clustering_distance_rows = dist_no_na,
   column_dend_height = unit(2, "cm"),
   clustering_distance_columns = dist_no_na
-  )
+)
 
-plot(h)
-
-pdf(file = "Desktop/UiO/Project 1/Figures/draw/beat_aml_karolinska_FIMM_enserink_complex_for_schematic.pdf", width = 8, height = 12)  # PDF output
-#pushViewport(viewport(width = 10, height = 8))
 plot(
-  h,
+  all_labs_dss2_heatmap,
+  heatmap_legend_side = "right",
+  annotation_legend_side = "right",
+  merge_legends = TRUE, 
+  padding = unit(c(0, 0, 0, 0), "mm")
+)
+
+#Save the heatmap plot as a pdf; this was not the dimensions used for the figure in the article (this was done by copying the plot from rstudio)
+pdf(file = paste0(figure_output,"all_labs_dss2_heatmap.pdf"), width = 8, height = 12)  # PDF output
+plot(
+  all_labs_dss2_heatmap,
   heatmap_legend_side = "right",
   annotation_legend_side = "right",
   merge_legends = TRUE, 
@@ -290,131 +147,9 @@ plot(
 )
 dev.off()  # Close the graphic device
 
-plot(
-  h,
-  heatmap_legend_side = "right",
-  annotation_legend_side = "right",
-  merge_legends = TRUE
-)
 
-# Clamp the matrix values to 0 - 50 for color scaling
-clamped_matrix <- pmin(pmax(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered, 0), 50)
-
-# Define the color function for DSS2 with min = 0, mid = 25, and max = 50
-dss2_col_fun <- circlize::colorRamp2(
-  c(0, 25, 50),    # min = 0, mid = 25, max = 50
-  c("blue", "white", "red")  # Colors: Blue for low, White for mid, Red for high
-)
-
-# Create the DSS2 legend
-dss2_legend <- ComplexHeatmap::Legend(
-  title = "DSS2",
-  col_fun = dss2_col_fun,
-  title_gp = gpar(fontsize = 12, fontface = "bold"),
-  labels_gp = gpar(fontsize = 12),
-  grid_height = unit(10, "mm")
-)
-
-# Combine legends as before
-combined_legends <- ComplexHeatmap::packLegend(lab_legend, dss2_legend, direction = "vertical")
-
-# Heatmap creation using the clamped matrix
-f <- ComplexHeatmap::Heatmap(
-  as.matrix(clamped_matrix),  # Use the clamped matrix for the heatmap
-  name = "DSS2",
-  cluster_rows = TRUE,
-  cluster_columns = TRUE,
-  clustering_method_rows = "ward.D2",
-  clustering_method_columns = "ward.D2",
-  row_names_gp = gpar(fontsize = 12, fontface = "bold", family = 'Arial'),
-  column_names_gp = gpar(fontsize = 12, fontface = "bold", family = 'Arial'),
-  show_row_dend = TRUE,
-  show_column_dend = TRUE,
-  show_column_names = FALSE,
-  top_annotation = a_col_h,  # Column annotations
-  left_annotation = NULL,
-  na_col = "grey",
-  row_gap = unit(1, "cm"),
-  column_gap = unit(1, "cm"),
-  col = dss2_col_fun,  # Use the adjusted color function
-  show_heatmap_legend = FALSE,
-  width = unit(12.01, "cm"),
-  height = unit(11.21, "cm"),
-  column_title = "",
-  column_title_gp = gpar(fontsize = 12, fontface = "bold"),
-  row_dend_width = unit(2, "cm"),
-  clustering_distance_rows = "euclidean",
-  column_dend_height = unit(2, "cm"),
-  clustering_distance_columns = "euclidean"
-)
-
-# Draw heatmap with only the combined legends
-ComplexHeatmap::draw(f, annotation_legend_list = combined_legends)
-ComplexHeatmap::draw(f)
-###################################################################################################################################################################################################################################
-
-
-
-
-
-
-#All datasets ----
-beat_aml_karolinska <- rbind(subset(dss_karolinska_common_drugs, select = c(drug, Patient.num, DSS2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
-beat_aml_karolinska_FIMM <- rbind(beat_aml_karolinska, subset(dss_fimm_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
-beat_aml_karolinska_FIMM_enserink<- rbind(beat_aml_karolinska_FIMM, subset(dss_github_enserink, select = c(drug, Patient.num, DSS2,lab)))
-specific_order <- c("Helsinki","Beat AML", "Karolinska", "Oslo")
-
-# Convert the column to a factor with the specific order
-beat_aml_karolinska_FIMM_enserink$lab <- factor(beat_aml_karolinska_FIMM_enserink$lab, levels = specific_order)
-
-
-beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Tanespimycin')
-beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Sapanisertib')
-beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != '001, RAD')
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- pivot_wider(beat_aml_karolinska_FIMM_enserink, names_from = drug, values_from = DSS2)
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- beat_aml_karolinska_FIMM_enserink_for_heatmap[!is.na(beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num),]
-
-rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
-
-# Check how many values are missing in each row
-missing_per_row <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
-#Remove row if total missing in row is higher than 200
-beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap[missing_per_row <= 30, ]
-# Check how many values are missing in each col
-missing_per_col <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
-#Remove col if total missing in col is higher than 100
-beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered[,missing_per_col <= 300]
-beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered_x <- na.omit(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered)
-pca_plots(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered_x, title = "PCA Plot", "~/Desktop/UiO/Project 1/Figures/V3/Karolinska_BeatAML_PCA_Plot1.png", 'Patient.num', 'lab')
-
-ppca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], nPcs=2)
-
-nb = estim_ncpPCA(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)],ncp.max=5)
-res.comp = imputePCA(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)],ncp=2)
-res.pca = PCA(res.comp$completeObs) 
-
-res.comp = MIPCA(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], ncp = nb$ncp, nboot = 1000)
-plot(res.comp) 
-
-PPCA <- ppca(res.comp$completeObs, ndim=2)
-plot(PPCA$Y,  pch=19, col=label, main="PCA")
-
-pca_result <- prcomp(res.comp$completeObs, scale. = TRUE)
-pc_scores <- as.data.frame(pca_result$x[, 1:2])  # Using only the first two principal components
-pca_data <- cbind(pc_scores, lab = beat_aml_karolinska_FIMM_enserink_for_heatmap$lab)
-nrow(pca_data)
-nrow(beat_aml_karolinska_FIMM_enserink_for_heatmap)
-ggplot(pca_data, aes(x = PC1, y = PC2, color=lab)) +
-  geom_point() +
-  #geom_text(nudge_x = 0.2, nudge_y = 0.2, size = 3) +
-  scale_color_manual(values = c("Helsinki" = "#e41a1c", "BeatAML" = "#4daf4a", "Karolinska" = "#ff7f00", "Oslo"= "#377eb8")) +
-  labs(color = "Labs") + theme(legend.text = element_text(size = 12),       # Increase legend label size
-                                              legend.title = element_text(size = 15), 
-                                              plot.title = element_text(size = 20))
-
-ppca <- pca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], method="ppca", nPcs=3, seed=123)
+#----PPCA plot creation----
+ppca <- pca(all_response_metrics_wide, method="ppca", nPcs=3, seed=123)
 # Get explained variance
 ppca_var <- summary(ppca)
 
@@ -451,11 +186,10 @@ pca_data <- ppca_data %>%
 furthest_points <- pca_data %>%
   group_by(lab) %>%
   top_n(3, distance_to_centroid) 
-library(ggrepel)
-library(ggnewscale)
+
 ppca_data$lab <- gsub('BeatAML', 'Beat AML', ppca_data$lab)
 ppca_data$lab <- factor(ppca_data$lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
-beat_aml_karolinska_FIMM_enserink_avg <- beat_aml_karolinska_FIMM_enserink %>% group_by(Patient.num) %>% dplyr::summarize('Average DSS2' = mean(DSS2))
+beat_aml_karolinska_FIMM_enserink_avg <- all_response_metrics %>% group_by(Patient.num) %>% dplyr::summarize('Average DSS2' = mean(DSS2))
 ppca_data <- ppca_data %>% left_join(beat_aml_karolinska_FIMM_enserink_avg, by = 'Patient.num')
 ppca_data$`Average DSS2` <- as.numeric(ppca_data$`Average DSS2`)
 ppca_data$Lab <- as.factor(ppca_data$lab)
@@ -493,7 +227,7 @@ ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color=Lab)) 
     axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
     axis.text = element_text(size = 10, family = "Arial")
   )
-  #guides(color = guide_legend(override.aes = aes(label = "", alpha = 1)))
+#guides(color = guide_legend(override.aes = aes(label = "", alpha = 1)))
 
 print(ppca_plot)
 
@@ -543,98 +277,23 @@ ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/avg_dss_score_
 
 
 
-beat_aml_karolinska <- rbind(subset(dss_karolinska_common_drugs, select = c(drug, Patient.num, DSS2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
-beat_aml_karolinska_FIMM <- rbind(beat_aml_karolinska, subset(dss_fimm_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
-beat_aml_karolinska_FIMM_enserink<- rbind(beat_aml_karolinska_FIMM, subset(dss_github_enserink, select = c(drug, Patient.num, DSS2,lab)))
-
-clinical_info <- all_response_metrics %>% mutate(Patient.num = ifelse(lab == "Karolinska", paste0(as.character(Patient.num), "_", as.character(sample)), as.character(Patient.num)))
-
-beat_aml_karolinska_FIMM_enserink <- merge(beat_aml_karolinska_FIMM_enserink, unique(clinical_info[,c('Patient.num', 'Disease.status', 'Tissue', 'sample')]), by='Patient.num')
-beat_aml_karolinska_FIMM_enserink[beat_aml_karolinska_FIMM_enserink$lab == "Karolinska",]
-specific_order <- c("Helsinki","Beat AML", "Karolinska", "Oslo")
-
-# Convert the column to a factor with the specific order
-beat_aml_karolinska_FIMM_enserink$lab <- factor(beat_aml_karolinska_FIMM_enserink$lab, levels = specific_order)
 
 
-beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Tanespimycin')
-beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Sapanisertib')
-beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != '001, RAD')
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- pivot_wider(beat_aml_karolinska_FIMM_enserink, names_from = drug, values_from = DSS2)
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- beat_aml_karolinska_FIMM_enserink_for_heatmap[!is.na(beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num),]
 
-rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num
-beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
 
-ppca <- pca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], method="ppca", nPcs=3, seed=123)
-# Get explained variance
-ppca_var <- summary(ppca)
 
-# Extract percent variance for PC1 and PC2
-percent_var <- round(ppca@R2 * 100, 1)
 
-# Create a data frame for plotting
-var_df <- data.frame(
-  PC = paste0("PC", seq_along(percent_var)),
-  Variance = percent_var
-)
 
-ggplot(var_df, aes(x = PC, y = Variance)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  geom_text(aes(label = paste0(round(Variance, 1), "%")), vjust = -0.5, size = 4) +
-  labs(title = "Explained Variance by Principal Component",
-       y = "Percent Variance Explained",
-       x = "Principal Component") +
-  theme_minimal()
 
-## Get the estimated complete observations
-ppca_scores <- scores(ppca)
-nrow(ppca_scores)
-patient_clinical_ppca <- merge(ppca_scores, beat_aml_karolinska_FIMM_enserink_for_heatmap, by = 'row.names')
 
-#patient_clinical_ppca <- merge(ppca_data, unique(all_response_metrics[,c('Patient.num', 'Disease.status', 'Tissue', 'sample')]), by='Patient.num')
-#patient_clinical_ppca %>% group_by(Tissue) %>% dplyr::summarize(c = n())
-#patient_clinical_ppca[is.na(patient_clinical_ppca$Tissue),]
-#all_response_metrics[is.na(all_response_metrics$Tissue),]
-clinical_ppca_plot <- ggplot(as.data.frame(patient_clinical_ppca), aes(x = PC1, y = PC2, color=`Disease.status`, shape=Tissue)) +
-  geom_point() +
-  labs(
-    x = paste0("PC1 (", round(percent_var[1], 1), "%)"),
-    y = paste0("PC2 (", round(percent_var[2], 1), "%)"),
-    color = ""
-  ) +
-  #geom_text_repel(data = furthest_points, aes(label = Patient.num), size = 4, box.padding = 0.5, max.overlaps = 20) +
-  #scale_color_gradient(low = "lightblue", high = "blue") + 
-  #scale_color_manual(values = c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")) +
-  labs(color = "") + 
-  guides(
-    color = guide_legend(
-      override.aes = aes(shape = 15, size = 4, width = 1.5, height = 1),  # Adjust legend symbol size
-      label.spacing = unit(0.5, "cm")  # Reduce space between text and legend symbol
-    )
-  ) +  
-  #theme_minimal()+
-  theme(
-    panel.background = element_blank(), 
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    legend.title = element_blank(),
-    legend.text = element_text(size = 12, family = "Arial"),    # Center legend text
-    legend.position = "right",                                
-    legend.justification = "center",        # Ensure the legend is centered
-    #legend.box = "horizontal",
-    legend.key = element_blank(),                            # Remove key background
-    legend.spacing.x = unit(0.2, "cm"),  
-    legend.key.size = unit(0.5, "lines"),      # Adjust size of the colored squares
-    legend.margin = margin(t = 0, b = 0, l = 0, r = 0),
-    plot.margin = margin(10, 10, 10, 10),
-    axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
-    axis.text = element_text(size = 10, family = "Arial")
-  )
-#guides(color = guide_legend(override.aes = aes(label = "", alpha = 1)))
 
-print(clinical_ppca_plot)
+
+
+
+
+
+
+
 
 #############################################################################################################################################################################################
 #----PPCA plot Other metrics----
@@ -1022,6 +681,592 @@ lt = apply(m, 2, function(x) data.frame(density(x)[c("x", "y")]))
 ha = rowAnnotation(foo = anno_joyplot(lt, width = unit(4, "cm"), 
                                       gp = gpar(fill = 1:10), transparency = 0.75))
 #############################################################################################################################################################################################
+
+
+
+beat_aml_karolinska <- rbind(subset(dss_karolinska_common_drugs, select = c(drug, Patient.num, DSS2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+beat_aml_karolinska_FIMM <- rbind(beat_aml_karolinska, subset(dss_fimm_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+beat_aml_karolinska_FIMM_enserink<- rbind(beat_aml_karolinska_FIMM, subset(dss_github_enserink, select = c(drug, Patient.num, DSS2,lab)))
+
+clinical_info <- all_response_metrics %>% mutate(Patient.num = ifelse(lab == "Karolinska", paste0(as.character(Patient.num), "_", as.character(sample)), as.character(Patient.num)))
+
+beat_aml_karolinska_FIMM_enserink <- merge(beat_aml_karolinska_FIMM_enserink, unique(clinical_info[,c('Patient.num', 'Disease.status', 'Tissue', 'sample')]), by='Patient.num')
+beat_aml_karolinska_FIMM_enserink[beat_aml_karolinska_FIMM_enserink$lab == "Karolinska",]
+specific_order <- c("Helsinki","Beat AML", "Karolinska", "Oslo")
+
+# Convert the column to a factor with the specific order
+beat_aml_karolinska_FIMM_enserink$lab <- factor(beat_aml_karolinska_FIMM_enserink$lab, levels = specific_order)
+
+
+beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Tanespimycin')
+beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Sapanisertib')
+beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != '001, RAD')
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- pivot_wider(beat_aml_karolinska_FIMM_enserink, names_from = drug, values_from = DSS2)
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- beat_aml_karolinska_FIMM_enserink_for_heatmap[!is.na(beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num),]
+
+rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num
+beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+
+ppca <- pca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], method="ppca", nPcs=3, seed=123)
+# Get explained variance
+ppca_var <- summary(ppca)
+
+# Extract percent variance for PC1 and PC2
+percent_var <- round(ppca@R2 * 100, 1)
+
+# Create a data frame for plotting
+var_df <- data.frame(
+  PC = paste0("PC", seq_along(percent_var)),
+  Variance = percent_var
+)
+
+ggplot(var_df, aes(x = PC, y = Variance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = paste0(round(Variance, 1), "%")), vjust = -0.5, size = 4) +
+  labs(title = "Explained Variance by Principal Component",
+       y = "Percent Variance Explained",
+       x = "Principal Component") +
+  theme_minimal()
+
+## Get the estimated complete observations
+ppca_scores <- scores(ppca)
+nrow(ppca_scores)
+patient_clinical_ppca <- merge(ppca_scores, beat_aml_karolinska_FIMM_enserink_for_heatmap, by = 'row.names')
+
+#patient_clinical_ppca <- merge(ppca_data, unique(all_response_metrics[,c('Patient.num', 'Disease.status', 'Tissue', 'sample')]), by='Patient.num')
+#patient_clinical_ppca %>% group_by(Tissue) %>% dplyr::summarize(c = n())
+#patient_clinical_ppca[is.na(patient_clinical_ppca$Tissue),]
+#all_response_metrics[is.na(all_response_metrics$Tissue),]
+clinical_ppca_plot <- ggplot(as.data.frame(patient_clinical_ppca), aes(x = PC1, y = PC2, color=`Disease.status`, shape=Tissue)) +
+  geom_point() +
+  labs(
+    x = paste0("PC1 (", round(percent_var[1], 1), "%)"),
+    y = paste0("PC2 (", round(percent_var[2], 1), "%)"),
+    color = ""
+  ) +
+  #geom_text_repel(data = furthest_points, aes(label = Patient.num), size = 4, box.padding = 0.5, max.overlaps = 20) +
+  #scale_color_gradient(low = "lightblue", high = "blue") + 
+  #scale_color_manual(values = c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")) +
+  labs(color = "") + 
+  guides(
+    color = guide_legend(
+      override.aes = aes(shape = 15, size = 4, width = 1.5, height = 1),  # Adjust legend symbol size
+      label.spacing = unit(0.5, "cm")  # Reduce space between text and legend symbol
+    )
+  ) +  
+  #theme_minimal()+
+  theme(
+    panel.background = element_blank(), 
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12, family = "Arial"),    # Center legend text
+    legend.position = "right",                                
+    legend.justification = "center",        # Ensure the legend is centered
+    #legend.box = "horizontal",
+    legend.key = element_blank(),                            # Remove key background
+    legend.spacing.x = unit(0.2, "cm"),  
+    legend.key.size = unit(0.5, "lines"),      # Adjust size of the colored squares
+    legend.margin = margin(t = 0, b = 0, l = 0, r = 0),
+    plot.margin = margin(10, 10, 10, 10),
+    axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
+    axis.text = element_text(size = 10, family = "Arial")
+  )
+#guides(color = guide_legend(override.aes = aes(label = "", alpha = 1)))
+
+print(clinical_ppca_plot)
+
+
+# #Heatmap all datasets ----
+# names(dss_karolinska)[names(dss_karolinska) == "dss2"] <- "DSS2"
+# names(dss_github_enserink)[names(dss_github_enserink) == "dss2"] <- "DSS2"
+# 
+# beat_aml_karolinska <- rbind(subset(dss_karolinska_common_drugs, select = c(drug, Patient.num, DSS2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+# beat_aml_karolinska_FIMM <- rbind(beat_aml_karolinska, subset(dss_fimm_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+# beat_aml_karolinska_FIMM_enserink<- rbind(beat_aml_karolinska_FIMM, subset(dss_enserink_common_drugs, select = c(drug, Patient.num, DSS2,lab)))
+# beat_aml_karolinska_FIMM_enserink <- beat_aml_karolinska_FIMM_enserink[!is.na(beat_aml_karolinska_FIMM_enserink$Patient.num),]
+# beat_aml_karolinska_FIMM_enserink <- beat_aml_karolinska_FIMM_enserink %>% mutate(drug = ifelse(drug == 'PONATINIB', 'Ponatinib', drug))
+# 
+# a_col <- unique(subset(beat_aml_karolinska_FIMM_enserink, select = c(lab, Patient.num)))
+# a_col <- as.data.frame(a_col)
+# rownames(a_col) <- a_col$Patient.num
+# beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != '001, RAD')
+# beat_aml_karolinska_FIMM_enserink$lab <- NULL
+# beat_aml_karolinska_FIMM_enserink_for_heatmap <- pivot_wider(beat_aml_karolinska_FIMM_enserink, names_from = Patient.num, values_from = DSS2)
+# beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+# rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- beat_aml_karolinska_FIMM_enserink_for_heatmap$drug
+# beat_aml_karolinska_FIMM_enserink_for_heatmap$drug <- NULL
+# beat_aml_karolinska_FIMM_enserink_for_heatmap$lab <- NULL
+# beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+# #length(missing_per_row)
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap[missing_per_row <= 800, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered[,missing_per_col <= 25]
+# #beat_aml_karolinska_for_heatmap_filtered[is.na(beat_aml_karolinska_for_heatmap_filtered)] <- 0
+# 
+# rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- tools::toTitleCase(rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap))
+# dss_long <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+# #dss_long$drug <- rownames(dss_long)
+# dss_long <- gather(as.data.frame(dss_long), patient_id, dss2, 'kAML_001_fresh':'patient 29', factor_key=TRUE) %>% as.data.frame()
+# a_col <- as.data.frame(a_col)
+# a = inner_join(unique(subset(dss_long, select = patient_id)), unique(a_col[, c('Patient.num', 'lab')]), by = c('patient_id' = 'Patient.num'))
+# a <- as.data.frame(unique(a[,c("patient_id", "lab")]))
+# #rownames(a) <- a$patient_id
+# #a$patient_id <- NULL
+# a <- as.data.frame(a)
+# heatmap_plots(as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/V3/beat_aml_karolinska_FIMM_enserink1.pdf", title = "DSS2 Heatmap of all drugs", c_method= "ward.D2", height=40, width=460)
+# complexheatmap_plots(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered), a_col=a, fontsize_row = FALSE,filename = "Desktop/UiO/Project 1/Figures/draw/beat_aml_karolinska_FIMM_enserink_complex.pdf", title = "DSS2 Heatmap of all drugs", c_method= "ward.D2", height=40, width=460)
+# length(rownames(a))
+# ncol(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered)
+# col_anno <- subset(a, patient_id != "AML_001" & patient_id != "AML_002", select="lab") %>% dplyr::rename(Lab = lab)
+# col_anno$Lab <- factor(col_anno$Lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
+# 
+# a_col_h <- ComplexHeatmap::HeatmapAnnotation(df = col_anno, annotation_legend_param = list(
+#   title = "Lab",
+#   title_gp = gpar(fontsize = 11, fontface = "bold"),
+#   labels_gp = gpar(fontsize = 11),
+#   #grid_width = unit(10, "mm"),
+#   #grid_height = unit(10, "mm"),
+#   legend_direction = "vertical",
+#   border = FALSE
+# ),
+# col = list(Lab= c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")), 
+# show_annotation_name = FALSE
+# )
+# str(a)
+# matrix_colnames <- colnames(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered[,-c(1,2)])
+# annotation_rownames <- rownames(a)
+# beat_aml_karolinska_FIMM_enserink_for_heatmap
+# 
+# library(cluster)
+# 
+# # Compute distance matrix with Gower’s method
+# dist_mat <- daisy(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap), metric = "gower")
+# 
+# # Perform clustering
+# hclust_res <- hclust(dist_mat, method = "ward.D2")
+# 
+# 
+# library(proxy)
+# 
+# # Custom function for distance that ignores NAs
+# dist_no_na <- function(x) {
+#   #d <- daisy(x, metric = "euclidean")
+#   d <- as.dist(proxy::dist(x, method = "euclidean", pairwise = TRUE))  # pairwise handles NAs
+#   d[is.na(d)] <- max(d, na.rm = TRUE)  # Replace NA distances with max value
+#   as.dist(d)
+# }
+# 
+# # Perform clustering while ignoring NAs
+# row_clustering <- hclust(dist_no_na(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap)), method = "ward.D")
+# col_clustering <- hclust(dist_no_na(t(as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap))), method = "ward.D")
+# 
+# ComplexHeatmap::Heatmap(
+#   as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap), 
+#   cluster_rows = row_clustering, 
+#   cluster_columns = col_clustering, 
+#   na_col = "grey")
+# 
+# 
+# 
+# h <- ComplexHeatmap::Heatmap(
+#   as.matrix(beat_aml_karolinska_FIMM_enserink_for_heatmap),
+#   name = "DSS2",  # Legend header
+#   cluster_rows = TRUE,
+#   cluster_columns = TRUE,
+#   clustering_method_rows = "ward.D",
+#   clustering_method_columns = "ward.D2",
+#   row_names_gp = gpar(fontsize = 9),  # Row font size 10
+#   column_names_gp = gpar(fontsize = 1),  # Column font size 10
+#   show_row_dend = TRUE,
+#   show_column_dend = TRUE,
+#   show_column_names = FALSE,
+#   top_annotation = a_col_h,  # Column annotations
+#   left_annotation = NULL,  # Row annotations
+#   na_col = "grey",
+#   row_gap = unit(1, "cm"),             # Space between rows
+#   column_gap = unit(1, "cm"),          # Space between columns
+#   heatmap_legend_param = list(
+#     title = "DSS2",  # Add header to the legend
+#     title_gp = gpar(fontsize = 11, fontface = "bold"),  # Legend title font
+#     labels_gp = gpar(fontsize = 10), 
+#     grid_height = unit(8, "mm")
+#   ),
+#   #annotation_legend_param = list(title = ""), 
+#   width = unit(8, "cm"),  # 12 #20
+#   height = unit(12, "cm"),  # 9.6 #16
+#   column_title = "",
+#   column_title_gp = gpar(fontsize = 20, fontface = "bold"), 
+#   row_dend_width = unit(2, "cm"),
+#   clustering_distance_rows = "euclidean",
+#   column_dend_height = unit(2, "cm"),
+#   clustering_distance_columns = dist_no_na
+#   )
+# 
+# plot(h)
+# 
+# pdf(file = "Desktop/UiO/Project 1/Figures/draw/beat_aml_karolinska_FIMM_enserink_complex_for_schematic.pdf", width = 8, height = 12)  # PDF output
+# #pushViewport(viewport(width = 10, height = 8))
+# plot(
+#   h,
+#   heatmap_legend_side = "right",
+#   annotation_legend_side = "right",
+#   merge_legends = TRUE, 
+#   padding = unit(c(0, 0, 0, 0), "mm")
+# )
+# dev.off()  # Close the graphic device
+# 
+# plot(
+#   h,
+#   heatmap_legend_side = "right",
+#   annotation_legend_side = "right",
+#   merge_legends = TRUE
+# )
+# 
+# # Clamp the matrix values to 0 - 50 for color scaling
+# clamped_matrix <- pmin(pmax(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered, 0), 50)
+# 
+# # Define the color function for DSS2 with min = 0, mid = 25, and max = 50
+# dss2_col_fun <- circlize::colorRamp2(
+#   c(0, 25, 50),    # min = 0, mid = 25, max = 50
+#   c("blue", "white", "red")  # Colors: Blue for low, White for mid, Red for high
+# )
+# 
+# # Create the DSS2 legend
+# dss2_legend <- ComplexHeatmap::Legend(
+#   title = "DSS2",
+#   col_fun = dss2_col_fun,
+#   title_gp = gpar(fontsize = 12, fontface = "bold"),
+#   labels_gp = gpar(fontsize = 12),
+#   grid_height = unit(10, "mm")
+# )
+# 
+# # Combine legends as before
+# combined_legends <- ComplexHeatmap::packLegend(lab_legend, dss2_legend, direction = "vertical")
+# 
+# # Heatmap creation using the clamped matrix
+# f <- ComplexHeatmap::Heatmap(
+#   as.matrix(clamped_matrix),  # Use the clamped matrix for the heatmap
+#   name = "DSS2",
+#   cluster_rows = TRUE,
+#   cluster_columns = TRUE,
+#   clustering_method_rows = "ward.D2",
+#   clustering_method_columns = "ward.D2",
+#   row_names_gp = gpar(fontsize = 12, fontface = "bold", family = 'Arial'),
+#   column_names_gp = gpar(fontsize = 12, fontface = "bold", family = 'Arial'),
+#   show_row_dend = TRUE,
+#   show_column_dend = TRUE,
+#   show_column_names = FALSE,
+#   top_annotation = a_col_h,  # Column annotations
+#   left_annotation = NULL,
+#   na_col = "grey",
+#   row_gap = unit(1, "cm"),
+#   column_gap = unit(1, "cm"),
+#   col = dss2_col_fun,  # Use the adjusted color function
+#   show_heatmap_legend = FALSE,
+#   width = unit(12.01, "cm"),
+#   height = unit(11.21, "cm"),
+#   column_title = "",
+#   column_title_gp = gpar(fontsize = 12, fontface = "bold"),
+#   row_dend_width = unit(2, "cm"),
+#   clustering_distance_rows = "euclidean",
+#   column_dend_height = unit(2, "cm"),
+#   clustering_distance_columns = "euclidean"
+# )
+# 
+# # Draw heatmap with only the combined legends
+# ComplexHeatmap::draw(f, annotation_legend_list = combined_legends)
+# ComplexHeatmap::draw(f)
+# ###################################################################################################################################################################################################################################
+
+# #All datasets ----
+# beat_aml_karolinska <- rbind(subset(dss_karolinska_common_drugs, select = c(drug, Patient.num, DSS2, lab)), subset(dss_beat_aml_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+# beat_aml_karolinska_FIMM <- rbind(beat_aml_karolinska, subset(dss_fimm_common_drugs, select = c(drug, Patient.num, DSS2, lab)))
+# beat_aml_karolinska_FIMM_enserink<- rbind(beat_aml_karolinska_FIMM, subset(dss_github_enserink, select = c(drug, Patient.num, DSS2,lab)))
+# specific_order <- c("Helsinki","Beat AML", "Karolinska", "Oslo")
+# 
+# # Convert the column to a factor with the specific order
+# beat_aml_karolinska_FIMM_enserink$lab <- factor(beat_aml_karolinska_FIMM_enserink$lab, levels = specific_order)
+# 
+# 
+# beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Tanespimycin')
+# beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != 'Sapanisertib')
+# beat_aml_karolinska_FIMM_enserink <- subset(beat_aml_karolinska_FIMM_enserink, drug != '001, RAD')
+# beat_aml_karolinska_FIMM_enserink_for_heatmap <- pivot_wider(beat_aml_karolinska_FIMM_enserink, names_from = drug, values_from = DSS2)
+# beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+# beat_aml_karolinska_FIMM_enserink_for_heatmap <- beat_aml_karolinska_FIMM_enserink_for_heatmap[!is.na(beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num),]
+# 
+# rownames(beat_aml_karolinska_FIMM_enserink_for_heatmap) <- beat_aml_karolinska_FIMM_enserink_for_heatmap$Patient.num
+# beat_aml_karolinska_FIMM_enserink_for_heatmap <- as.data.frame(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+# 
+# # Check how many values are missing in each row
+# missing_per_row <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap, 1, function(row) sum(is.na(row)))
+# #Remove row if total missing in row is higher than 200
+# beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap[missing_per_row <= 30, ]
+# # Check how many values are missing in each col
+# missing_per_col <- apply(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered, 2, function(row) sum(is.na(row)))
+# #Remove col if total missing in col is higher than 100
+# beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered <- beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered[,missing_per_col <= 300]
+# beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered_x <- na.omit(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered)
+# pca_plots(beat_aml_karolinska_FIMM_enserink_for_heatmap_filtered_x, title = "PCA Plot", "~/Desktop/UiO/Project 1/Figures/V3/Karolinska_BeatAML_PCA_Plot1.png", 'Patient.num', 'lab')
+# 
+# ppca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], nPcs=2)
+# 
+# nb = estim_ncpPCA(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)],ncp.max=5)
+# res.comp = imputePCA(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)],ncp=2)
+# res.pca = PCA(res.comp$completeObs) 
+# 
+# res.comp = MIPCA(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], ncp = nb$ncp, nboot = 1000)
+# plot(res.comp) 
+# 
+# PPCA <- ppca(res.comp$completeObs, ndim=2)
+# plot(PPCA$Y,  pch=19, col=label, main="PCA")
+# 
+# pca_result <- prcomp(res.comp$completeObs, scale. = TRUE)
+# pc_scores <- as.data.frame(pca_result$x[, 1:2])  # Using only the first two principal components
+# pca_data <- cbind(pc_scores, lab = beat_aml_karolinska_FIMM_enserink_for_heatmap$lab)
+# nrow(pca_data)
+# nrow(beat_aml_karolinska_FIMM_enserink_for_heatmap)
+# ggplot(pca_data, aes(x = PC1, y = PC2, color=lab)) +
+#   geom_point() +
+#   #geom_text(nudge_x = 0.2, nudge_y = 0.2, size = 3) +
+#   scale_color_manual(values = c("Helsinki" = "#e41a1c", "BeatAML" = "#4daf4a", "Karolinska" = "#ff7f00", "Oslo"= "#377eb8")) +
+#   labs(color = "Labs") + theme(legend.text = element_text(size = 12),       # Increase legend label size
+#                                legend.title = element_text(size = 15), 
+#                                plot.title = element_text(size = 20))
+# 
+# ppca <- pca(beat_aml_karolinska_FIMM_enserink_for_heatmap[,-c(1, 2)], method="ppca", nPcs=3, seed=123)
+# # Get explained variance
+# ppca_var <- summary(ppca)
+# 
+# # Extract percent variance for PC1 and PC2
+# percent_var <- round(ppca@R2 * 100, 1)
+# 
+# # Create a data frame for plotting
+# var_df <- data.frame(
+#   PC = paste0("PC", seq_along(percent_var)),
+#   Variance = percent_var
+# )
+# 
+# ggplot(var_df, aes(x = PC, y = Variance)) +
+#   geom_bar(stat = "identity", fill = "steelblue") +
+#   geom_text(aes(label = paste0(round(Variance, 1), "%")), vjust = -0.5, size = 4) +
+#   labs(title = "Explained Variance by Principal Component",
+#        y = "Percent Variance Explained",
+#        x = "Principal Component") +
+#   theme_minimal()
+# 
+# ## Get the estimated complete observations
+# ppca_scores <- scores(ppca)
+# nrow(ppca_scores)
+# ppca_data <- merge(ppca_scores, beat_aml_karolinska_FIMM_enserink_for_heatmap, by = 'row.names')
+# 
+# centroids <- ppca_data %>%
+#   group_by(lab) %>%
+#   summarise(centroid_PC1 = mean(PC1), centroid_PC2 = mean(PC2))
+# 
+# pca_data <- ppca_data %>%
+#   left_join(centroids, by = "lab") %>%
+#   mutate(distance_to_centroid = sqrt((PC1 - centroid_PC1)^2 + (PC2 - centroid_PC2)^2))
+# 
+# furthest_points <- pca_data %>%
+#   group_by(lab) %>%
+#   top_n(3, distance_to_centroid) 
+# library(ggrepel)
+# library(ggnewscale)
+# ppca_data$lab <- gsub('BeatAML', 'Beat AML', ppca_data$lab)
+# ppca_data$lab <- factor(ppca_data$lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
+# beat_aml_karolinska_FIMM_enserink_avg <- beat_aml_karolinska_FIMM_enserink %>% group_by(Patient.num) %>% dplyr::summarize('Average DSS2' = mean(DSS2))
+# ppca_data <- ppca_data %>% left_join(beat_aml_karolinska_FIMM_enserink_avg, by = 'Patient.num')
+# ppca_data$`Average DSS2` <- as.numeric(ppca_data$`Average DSS2`)
+# ppca_data$Lab <- as.factor(ppca_data$lab)
+# ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color=Lab)) +
+#   geom_point() +
+#   labs(
+#     x = paste0("PC1 (", round(percent_var[1], 1), "%)"),
+#     y = paste0("PC2 (", round(percent_var[2], 1), "%)"),
+#     color = ""
+#   ) +
+#   #geom_text_repel(data = furthest_points, aes(label = Patient.num), size = 4, box.padding = 0.5, max.overlaps = 20) +
+#   #scale_color_gradient(low = "lightblue", high = "blue") + 
+#   scale_color_manual(values = c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")) +
+#   labs(color = "") + 
+#   guides(
+#     color = guide_legend(
+#       override.aes = aes(shape = 15, size = 4, width = 1.5, height = 1),  # Adjust legend symbol size
+#       label.spacing = unit(0.5, "cm")  # Reduce space between text and legend symbol
+#     )
+#   ) +  
+#   #theme_minimal()+
+#   theme(
+#     panel.background = element_blank(), 
+#     panel.grid.major = element_blank(),
+#     panel.grid.minor = element_blank(),
+#     legend.text = element_text(size = 12, family = "Arial"),    # Center legend text
+#     legend.position = "top",                                
+#     legend.justification = "center",        # Ensure the legend is centered
+#     legend.box = "horizontal",
+#     legend.key = element_blank(),                            # Remove key background
+#     legend.spacing.x = unit(0.2, "cm"),  
+#     legend.key.size = unit(0.5, "lines"),      # Adjust size of the colored squares
+#     legend.margin = margin(t = 0, b = 0, l = 0, r = 0),
+#     plot.margin = margin(10, 10, 10, 10),
+#     axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
+#     axis.text = element_text(size = 10, family = "Arial")
+#   )
+# #guides(color = guide_legend(override.aes = aes(label = "", alpha = 1)))
+# 
+# print(ppca_plot)
+# 
+# ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/v1/PPCA_plot_all_data_all_labs.png", plot = ppca_plot, width = 10, height = 8, dpi = 300)
+# midpoint_value <- median(ppca_data[ppca_data$lab == "Beat AML",]$`Average DSS2`, na.rm = TRUE)
+# ppca_data$`Average DSS2` <- as.numeric(ppca_data$`Average DSS2`)
+# dss2_ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color = `Average DSS2`)) +
+#   # 1st Category (A)
+#   geom_point(aes(color = ifelse(lab == "Beat AML", `Average DSS2`, NA)), size = 4) +  
+#   scale_color_gradient2(low = "#ccece6", mid = "#8dd3c7", high = "#145A32", midpoint = median(ppca_data[ppca_data$lab == "Beat AML",]$`Average DSS2`, na.rm = TRUE), na.value = NA, name = "Beat AML", guide = guide_colorbar(title.position = "top", barwidth = 1, barheight = 4)) +  
+#   new_scale_color() +  # Reset color scale for other points
+#   
+#   # 2nd Category (B)
+#   geom_point(aes(color = ifelse(lab == "Oslo", `Average DSS2`, NA)), size = 4) +  
+#   scale_color_gradient2(low = "#ffe6c7", mid = "#fdb462", high = "#a34700",midpoint = median(ppca_data[ppca_data$lab == "Oslo",]$`Average DSS2`, na.rm = TRUE), na.value = NA, name = "Oslo", guide = guide_colorbar(title.position = "top", barwidth = 1, barheight = 4)) +
+#   new_scale_color() +
+#   
+#   # 3rd Category (C)
+#   geom_point(aes(color = ifelse(lab == "Helsinki", `Average DSS2`, NA)), size = 4) +  
+#   scale_color_gradient2(low = "#ffd2cc", mid = "#fb8072", high = "#a12b1d", ,midpoint = median(ppca_data[ppca_data$lab == "Helsinki",]$`Average DSS2`, na.rm = TRUE), na.value = NA, name = "Helsinki", guide = guide_colorbar(title.position = "top", barwidth = 1, barheight = 4)) +
+#   new_scale_color() +
+#   
+#   # 4th Category (D)
+#   geom_point(aes(color = ifelse(lab == "Karolinska", `Average DSS2`, NA)), size = 4) +  
+#   scale_color_gradient2(low = "#d6ecff", mid = "#80b1d3", high = "#23537d", ,midpoint = median(ppca_data[ppca_data$lab == "Karolinska",]$`Average DSS2`, na.rm = TRUE), na.value = NA, name = "Karolinska", guide = guide_colorbar(title.position = "top", barwidth = 1, barheight = 4)) +
+#   #geom_point() +
+#   #geom_text_repel(data = furthest_points, aes(label = Patient.num), size = 4, box.padding = 0.5, max.overlaps = 20) +
+#   #scale_color_gradient(low = "blue", high = "red") + 
+#   #scale_shape_manual(values = c("Beat AML" = 16,"Oslo"= 17,"Helsinki" = 18, "Karolinska" = 19)) +
+#   labs(color = "") + 
+#   theme_minimal()+
+#   theme(
+#     panel.background = element_blank(), 
+#     panel.grid.major = element_blank(),
+#     panel.grid.minor = element_blank(),
+#     legend.text = element_text(size = 12, family = "Arial"),    # Center legend text
+#     #legend.position = "right",                                
+#     legend.spacing.x = unit(0.2, "cm"),  
+#     legend.key.size = unit(0.5, "lines"),      # Adjust size of the colored squares
+#     legend.margin = margin(t = 0, b = 0, l = 0, r = 0),                            
+#     plot.margin = margin(10, 10, 10, 10),
+#     axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
+#     axis.text = element_text(size = 10, family = "Arial")
+#   ) 
+# dss2_ppca_plot
+# ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/avg_dss_score_colorsPPCA_plot_all_data_all_labs_v1.png", plot = dss2_ppca_plot, width = 10, height = 8, dpi = 300)
+
+
+
+
+# #############################################################################################################################################################################################
+# #Importing the datasets ----
+# #Enserink ----
+# dss_github_enserink <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_enserink.csv')
+# dss_github_enserink$lab <- 'Oslo'
+# #colnames(dss_github_enserink)[colnames(dss_github_enserink) == "DSS2"] <- "dss2"
+# #Enserink full drug set 
+# dss_github_enserink_full_set_drugs <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_enserink_full_drug_set_testing.csv')
+# 
+# #BeatAML ----
+# dss_github_beat_aml <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_beat_aml_full_drug_set_v1.csv')
+# dss_github_beat_aml$lab <- 'Beat AML'
+# 
+# #Karolinska ----
+# karolinska_dss2_org <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/karolinska_institute_dss2.csv')
+# karolinska_dss2_org$...1 <- NULL
+# karolinska_dss2 <- gather(karolinska_dss2_org, patient_id, dss2, 'AML_001':'AML_347', factor_key=TRUE)
+# karolinska_dss2 <- as.data.frame(karolinska_dss2)
+# colnames(karolinska_dss2)[colnames(karolinska_dss2) == "patient_id"] <- "Patient.num"
+# 
+# ###
+# karolinska_fresh <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_karolinska_full_drug_set_fresh.csv')
+# #updating karolindka dataset
+# colnames(karolinska_fresh)[colnames(karolinska_fresh) == "DRUG_NAME"] <- "drug"
+# colnames(karolinska_fresh)[colnames(karolinska_fresh) == "DSS"] <- "DSS2"
+# #karolinska_fresh <- karolinska_fresh %>% mutate(Patient.num = paste(Patient.num, '_fresh'))
+# karolinska_fresh$sample <- 'fresh'
+# karolinska_fresh <- karolinska_fresh %>% mutate(Patient.num = paste0(Patient.num, '_', sample)) %>% as.data.frame()
+# karolinska_frosen <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_karolinska_full_drug_set_frosen.csv')
+# #updating karolindka dataset
+# colnames(karolinska_frosen)[colnames(karolinska_frosen) == "DRUG_NAME"] <- "drug"
+# colnames(karolinska_frosen)[colnames(karolinska_frosen) == "DSS"] <- "DSS2"
+# #karolinska_frosen <- karolinska_frosen %>% mutate(Patient.num = paste(Patient.num, '_frozen'))
+# karolinska_frosen$sample <- 'frozen'
+# karolinska_frosen <- karolinska_frosen %>% mutate(Patient.num = paste0(Patient.num, '_', sample)) %>% as.data.frame()
+# dss_karolinska_github <- rbind(karolinska_fresh, karolinska_frosen)
+# dss_karolinska_github$lab <- 'Karolinska'
+# dss_karolinska_github$Tissue <- NA
+# dss_karolinska_github$Disease.status <- NA
+# dss_karolinska_github <- dss_karolinska_github %>% mutate(Patient.num = paste0('k',dss_karolinska_github$Patient.num))
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='Chidamide'] <- 'Tucidinostat'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='GDC-0994'] <- 'Ravoxertinib'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='GSK525762'] <- 'Molibresib'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='KPT-8602'] <- 'Eltanexor'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='MLN-0128'] <- 'Sapanisertib'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='MLN1117'] <- 'Serabelisib'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='NVP-ABL001'] <- 'Asciminib'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='NVP-BGJ398'] <- 'Infigratinib'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='ONO-4059'] <- 'Tirabrutinib'
+# dss_karolinska_github$drug[dss_karolinska_github$drug=='VX-745'] <- 'Neflamapimod'
+# dss_karolinska_github <- subset(dss_karolinska_github, Patient.num != 'kAML_009_frozen')
+# ###
+# 
+# 
+# #FIMM ----
+# #Their calculations
+# fimm_dss2 <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/fimm_drug_response.csv')
+# fimm_dss2 <- gather(fimm_dss2, patient_id, dss2, 'AML_084_04':'Healthy_17', factor_key=TRUE)
+# fimm_dss2 <- as.data.frame(fimm_dss2)
+# colnames(fimm_dss2)[colnames(fimm_dss2) == "patient_id"] <- "Patient.num"
+# 
+# #My calculations from the github package
+# dss_github_fimm <- read_csv('~/Desktop/UiO/Project 1/Data/Initial cleansing/dss_github_fimm_full_drug_set.csv')
+# 
+# #Common drug names ----
+# #Getting the common drugs across the 4 datasets
+# common_drugs <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/common_drugnames_pubchem.csv")
+# common_drugs$`Unnamed: 0_x` <- NULL
+# common_drugs$`Unnamed: 0_y` <- NULL
+# common_drugs$`Unnamed: 0` <- NULL
+# 
+# #Joining DSS calculations and common drug dataset ----
+# #All datasets are left with the 47 common drugs after the join 
+# dss_beat_aml_common_drugs <- inner_join(common_drugs, dss_github_beat_aml, by=c("beat_aml_drug_name"="drug"))
+# colnames(dss_beat_aml_common_drugs)[colnames(dss_beat_aml_common_drugs) == "pubchem_drug_name"] <- "drug"
+# dim(dss_beat_aml_common_drugs)
+# 
+# dss_karolinska_common_drugs <- inner_join(common_drugs, dss_karolinska_github, by=c("karolinska_drug_name"="drug"))
+# colnames(dss_karolinska_common_drugs)[colnames(dss_karolinska_common_drugs) == "pubchem_drug_name"] <- "drug"
+# dss_karolinska_common_drugs$lab <- 'Karolinska'
+# 
+# #Their calculations
+# dss_fimm <- inner_join(common_drugs, fimm_dss2, by=c("fimm_drug_name"="Drug_name"))
+# colnames(dss_fimm)[colnames(dss_fimm) == "pubchem_drug_name"] <- "drug"
+# dss_fimm$lab <- 'Helsinki'
+# 
+# #My calculations from the github package
+# dss_fimm_common_drugs <- inner_join(common_drugs, dss_github_fimm, by=c("fimm_drug_name"="drug"))
+# colnames(dss_fimm_common_drugs)[colnames(dss_fimm_common_drugs) == "pubchem_drug_name"] <- "drug"
+# dss_fimm_common_drugs$lab <- 'Helsinki'
+# 
+# #Enserink common drugs 
+# dss_enserink_common_drugs <- inner_join(common_drugs, dss_github_enserink_full_set_drugs, by=c("enserink_drug_name"="drug"))
+# colnames(dss_enserink_common_drugs)[colnames(dss_enserink_common_drugs) == "pubchem_drug_name"] <- "drug"
+# dss_enserink_common_drugs$lab <- "Oslo"
+# #############################################################################################################################################################################################
 
 # 
 # #############################################################################################################################################################################################

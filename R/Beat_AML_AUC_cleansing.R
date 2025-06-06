@@ -22,12 +22,8 @@ library(MESS)
 library(dplyr)
 
 #import beat aml datasets ----
-beat_aml_inhibitor <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/beat_aml_inhibitor.csv")
+beat_aml_inhibitor <- read_csv("~/Desktop/UiO/Project 1/Data/Second run/beat_aml_inhibitor.csv")
 beat_aml_inhibitor$...1 <- NULL
-View(beat_aml_inhibitor)
-
-common_drugs <- read_csv("~/Desktop/UiO/Project 1/Data/Initial cleansing/common_drugnames_pubchem.csv")
-
 
 # Function to calculate AUC using MESS package
 calculate_auc <- function(df, resp) {
@@ -75,4 +71,4 @@ transformed_data <- transformed_data %>%
   distinct()  # Remove duplicates in case there are any
 
 print(transformed_data)
-write_csv(transformed_data, "~/Desktop/UiO/Project 1/Data/test/beat_aml_inhibitor_cleaned.csv")
+write_csv(transformed_data, "~/Desktop/UiO/Project 1/Data/Second run/beat_aml_inhibitor_cleaned.csv")

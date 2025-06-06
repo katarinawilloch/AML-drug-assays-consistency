@@ -31,11 +31,12 @@ from matplotlib_venn import venn3
 from venny4py.venny4py import *
 
 #Reading files as dataframes
-initial_cleaning_output_loc = '/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/'
+initial_cleaning_output_loc = '/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Second run/'
 df_enserink_drugs = pd.read_csv(fr'{initial_cleaning_output_loc}enserink_lab_drug_information.csv')
 beat_aml_inhibitor  = pd.read_csv(fr'{initial_cleaning_output_loc}beat_aml_inhibitor.csv')
 fimm_drug_library = pd.read_csv(fr'{initial_cleaning_output_loc}fimm_drug_library.csv')
-karolinska_drug_library = pd.read_csv(fr'{initial_cleaning_output_loc}karolinska_institute_dss2.csv')
+karolinska_drug_library = pd.read_csv(fr'{initial_cleaning_output_loc}karolinska_normalised_reponse_raw.csv')
+karolinska_drug_library = karolinska_drug_library[['DRUG_NAME']].drop_duplicates()
 
 #Function to get the most common drug name in pubchem using the pubchem API
 def get_drug_synonyms(df, col_name, output_loc):
@@ -67,15 +68,19 @@ def get_drug_synonyms(df, col_name, output_loc):
 
 #Use the function to get the most common drug name for each dataset
 df_enserink_pubchem_drugs = get_drug_synonyms(df_enserink_drugs, 'Item Name', fr'{initial_cleaning_output_loc}enserink_lab_drug_information_pubchem.csv') #'/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/enserink_lab_drug_information_pubchem.csv'
+#df_enserink_pubchem_drugs = pd.read_csv(fr'{initial_cleaning_output_loc}enserink_lab_drug_information_pubchem.csv')
 df_enserink_pubchem_drugs = df_enserink_pubchem_drugs.rename(columns={'org_drug_name': 'enserink_drug_name'})
 
 df_beat_aml_pubchem_drugs = get_drug_synonyms(beat_aml_inhibitor, 'inhibitor', fr'{initial_cleaning_output_loc}beataml_drug_information_pubchem.csv') #'/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/beataml_drug_information_pubchem.csv'
+#df_beat_aml_pubchem_drugs = pd.read_csv(fr'{initial_cleaning_output_loc}beataml_drug_information_pubchem.csv')
 df_beat_aml_pubchem_drugs= df_beat_aml_pubchem_drugs.rename(columns={'org_drug_name': 'beat_aml_drug_name'})
 
 df_fimm_pubchem_drugs = get_drug_synonyms(fimm_drug_library, 'Preferred name', fr'{initial_cleaning_output_loc}fimm_drug_library_pubchem.csv') #'/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/fimm_drug_library_pubchem.csv'
+#df_fimm_pubchem_drugs = pd.read_csv(fr'{initial_cleaning_output_loc}fimm_drug_library_pubchem.csv')
 df_fimm_pubchem_drugs = df_fimm_pubchem_drugs.rename(columns={'org_drug_name': 'fimm_drug_name'})
 
-df_karolinska_pubchem_drugs = get_drug_synonyms(karolinska_drug_library, 'drug name', fr'{initial_cleaning_output_loc}karolinska_drug_library_pubchem.csv') #'/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/karolinska_drug_library_pubchem.csv'
+df_karolinska_pubchem_drugs = get_drug_synonyms(karolinska_drug_library, 'DRUG_NAME', fr'{initial_cleaning_output_loc}karolinska_drug_library_pubchem.csv') #'/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/karolinska_drug_library_pubchem.csv'
+#df_karolinska_pubchem_drugs = pd.read_csv(fr'{initial_cleaning_output_loc}karolinska_drug_library_pubchem.csv')
 df_karolinska_pubchem_drugs = df_karolinska_pubchem_drugs.rename(columns={'org_drug_name': 'karolinska_drug_name'})
 
 #merging result dfs
@@ -87,6 +92,7 @@ print(common_drug_names)
 #saving merged dfs to csv
 common_drug_names.to_csv(fr'{initial_cleaning_output_loc}common_drugnames_pubchem.csv', index=False)
 
+df_karolinska_pubchem_drugs = df_karolinska_pubchem_drugs[['pubchem_drug_name']].drop_duplicates()
 #Creating dict of the dfs
 df = from_contents({'Oslo': df_enserink_pubchem_drugs['pubchem_drug_name'], 'Beat AML': df_beat_aml_pubchem_drugs['pubchem_drug_name'], 'Helsinki': df_fimm_pubchem_drugs['pubchem_drug_name'], 'Karolinska': df_karolinska_pubchem_drugs['pubchem_drug_name']})
 print(df)

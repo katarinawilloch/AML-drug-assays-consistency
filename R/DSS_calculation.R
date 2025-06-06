@@ -85,7 +85,7 @@ calc_dss <- function(df, drug_name, conc, screen_name, response, filename, graph
 
 
 #File locations 
-initial_cleansing <- "~/Desktop/UiO/Project 1/Data/Initial cleansing/"
+initial_cleansing <- "~/Desktop/UiO/Project 1/Data/Second run/"
 dss_output_locatiuon <- "~/Desktop/UiO/Project 1/Data/Response scores/"
 
 #import common drug names dataset
@@ -105,10 +105,11 @@ beat_aml_raw_response <- beat_aml_raw_response %>%
   mutate(patient_id = paste(dbgap_subject_id, dbgap_dnaseq_sample,dbgap_rnaseq_sample, sep = "_")) %>% as.data.frame()
 #transforming concentration from um to nm
 beat_aml_raw_response$well_concentration <- beat_aml_raw_response$well_concentration*1000
-#getting only 47 common drugs 
+#getting only 47 common drugs
 beat_aml_raw_response_common_drugs <- inner_join(common_drugs, beat_aml_raw_response, by=c("beat_aml_drug_name"="inhibitor"))
 #using function calc_dss to calculate dss values
 beat_aml_dss <- calc_dss(beat_aml_raw_response_common_drugs, 'pubchem_drug_name', 'well_concentration', 'patient_id', 'avg2_response', paste0(dss_output_locatiuon,'dss_github_beat_aml_full_drug_set_v1.csv'), graph = TRUE, viability = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/BeatAML")
+#beat_aml_dss <- read_csv(paste0(dss_output_locatiuon,'dss_github_beat_aml_full_drug_set_v1.csv'))
 print(beat_aml_dss)
 #annotating with what study the data is from
 beat_aml_dss$lab <- 'Beat AML'
@@ -126,10 +127,11 @@ fimm_raw_response$doseResponses <- fimm_raw_response$doseResponses/100
 #removing drug 'TG100-115'
 fimm_raw_response_df <- subset(fimm_raw_response, drug != 'TG100-115')
 #getting only 47 common drugs 
-fimm_raw_response_common_drugs <- inner_join(common_drugs, fimm_raw_response_df, by=c("fimm_drug_name"="inhibitor"))
+fimm_raw_response_common_drugs <- inner_join(common_drugs, fimm_raw_response_df, by=c("fimm_drug_name"="drug"))
 #using function calc_dss to get dss values
-fimm_dss <- calc_dss(fimm_raw_response_common_drugs, 'pubchem_drug_name', 'Final.Conc', 'sample', 'doseResponses', paste0(dss_output_locatiuon,'dss_github_fimm_full_drug_set_v1.csv'), graph = TRUE, viability = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM")
-print(fimm_dss)
+helsinki_dss <- calc_dss(fimm_raw_response_common_drugs, 'pubchem_drug_name', 'Final.Conc', 'sample', 'doseResponses', paste0(dss_output_locatiuon,'dss_github_fimm_full_drug_set_v1.csv'), graph = TRUE, viability = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/FIMM")
+#helsinki_dss <- read_csv(paste0(dss_output_locatiuon,'dss_github_fimm_full_drug_set_v1.csv'))
+print(helsinki_dss)
 #annotating with what study the data is from
 helsinki_dss$lab <- 'Helsinki'
 #annotating with sample type for later merging will be updated with actual info when merging with annotation file
@@ -144,9 +146,10 @@ enserink_breeze_input$dose <- enserink_breeze_input$dose*10^9
 #transforming inhibition values to percent viability
 enserink_breeze_input$response <-1 - enserink_breeze_input$y_true/100
 #getting only 47 common drugs 
-oslo_raw_response_common_drugs <- inner_join(common_drugs, enserink_breeze_input, by=c("enserink_drug_name"="inhibitor"))
+oslo_raw_response_common_drugs <- inner_join(common_drugs, enserink_breeze_input, by=c("enserink_drug_name"="drug"))
 #using function calc_dss to get dss values
-oslo_dss <- calc_dss(enserink_breeze_input, 'pubchem_drug_name', 'dose', 'Patient.ID', 'response', paste0(dss_output_locatiuon,'dss_github_enserink_full_drug_set_testing.csv'), viability = TRUE, graph = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Enserink")
+oslo_dss <- calc_dss(oslo_raw_response_common_drugs, 'pubchem_drug_name', 'dose', 'Patient.ID', 'response', paste0(dss_output_locatiuon,'dss_github_enserink_full_drug_set_testing.csv'), viability = TRUE, graph = TRUE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Enserink")
+#oslo_dss <- read_csv(paste0(dss_output_locatiuon,'dss_github_enserink_full_drug_set_testing.csv'))
 print(oslo_dss)
 #annotating with what study the data is from
 oslo_dss$lab <- 'Oslo'
@@ -162,12 +165,14 @@ karolinska_raw_response = read.csv(paste0(initial_cleansing,'karolinska_normalis
 #transforming inhibition values to percent viability
 karolinska_raw_response$Normalised_reponse = 1 - karolinska_raw_response$Normalised_reponse/100
 #getting only 47 common drugs 
-karolinska_raw_response_common_drugs <- inner_join(common_drugs, karolinska_raw_response, by=c("karolinska_drug_name"="inhibitor"))
+karolinska_raw_response_common_drugs <- inner_join(common_drugs, karolinska_raw_response, by=c("karolinska_drug_name"="DRUG_NAME"))
 #using function calc_dss to get dss values for the fresh samples
 karolinska_fresh_dss <- calc_dss(subset(karolinska_raw_response_common_drugs, sample == 'fresh'), 'pubchem_drug_name', 'CONCENTRATION', 'Patient.num', 'Normalised_reponse', paste0(dss_output_locatiuon,'dss_github_karolinska_full_drug_set_fresh.csv'), graph = TRUE, viability = FALSE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska/fresh")
+#karolinska_fresh_dss <- read_csv(paste0(dss_output_locatiuon,'dss_github_karolinska_full_drug_set_fresh.csv'))
 print(karolinska_fresh_dss)
 #using function calc_dss to get dss values for the frozen samples
 karolinska_frozen_dss <- calc_dss(subset(karolinska_raw_response_common_drugs, sample == 'frozen'), 'pubchem_drug_name', 'CONCENTRATION', 'Patient.num', 'Normalised_reponse', paste0(dss_output_locatiuon,'dss_github_karolinska_full_drug_set_frosen.csv'), graph = TRUE, viability = FALSE, set_dir = "/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/Karolinska/Frosen")
+#karolinska_frozen_dss <- read_csv(paste0(dss_output_locatiuon,'dss_github_karolinska_full_drug_set_frosen.csv'))
 print(karolinska_frozen_dss)
 #annotating dfs with fresh and frozen samples
 karolinska_fresh_dss$sample <- 'fresh'
@@ -207,9 +212,8 @@ ggplot(auc_beat_aml, aes(x=auc_a)) +
   geom_density(color="darkblue", fill="lightblue")
 
 ##----Oslo calculation ----
-oslo_raw_response_common_drugs
-auc_enserink <- enserink_breeze_input %>% 
-  group_by(patient_id, drug) %>% 
+auc_enserink <- oslo_raw_response_common_drugs %>% 
+  group_by(Patient.ID, pubchem_drug_name) %>% 
   summarise(auc_a = Log10.DSS(dose, response), .groups = 'drop') 
 
 ggplot(auc_enserink, aes(x=auc_a)) +
@@ -217,15 +221,14 @@ ggplot(auc_enserink, aes(x=auc_a)) +
 
 ##----Helsinki calculation ----
 auc_FIMM <- fimm_raw_response_common_drugs %>% 
-  group_by(patient_id, pubchem_drug_name) %>% 
+  group_by(sample, pubchem_drug_name) %>% 
   summarise(auc_a = Log10.DSS(Final.Conc, doseResponses), .groups = 'drop') 
-
 ggplot(auc_FIMM, aes(x=auc_a)) +
   geom_density(color="darkblue", fill="lightblue")
 
 ##----Karolinska calculation ----
 auc_karolinska <- karolinska_raw_response_common_drugs %>% 
-  group_by(patient_id, sample, pubchem_drug_name) %>% 
+  group_by(Patient.num, sample, pubchem_drug_name) %>% 
   summarise(auc_a = Log10.DSS(CONCENTRATION, Normalised_reponse), .groups = 'drop') 
 
 ggplot(auc_karolinska, aes(x=auc_a)) +
@@ -237,14 +240,26 @@ dss_values <- rbind(beat_aml_dss, helsinki_dss, oslo_dss, dss_karolinska_github)
 print(dss_values)
 write_csv(dss_values, paste0(dss_output_locatiuon, 'dss_values_all_labs.csv'))
 
+#Get auc dfs ready for merging
+colnames(auc_beat_aml)[colnames(auc_beat_aml) == "patient_id"] <- "Patient.num"
+colnames(auc_FIMM)[colnames(auc_FIMM) == "sample"] <- "Patient.num"
+colnames(auc_enserink)[colnames(auc_enserink) == "Patient.num"] <- "Patient.ID"
+colnames(auc_enserink)[colnames(auc_enserink) == "Patient.ID"] <- "Patient.num"
+auc_beat_aml$sample <- 'fresh'
+auc_FIMM$sample <- NA
+auc_enserink$sample <- NA
+#annotating sample ids with k in front to distinguish the ids from the helsinki data
+auc_karolinska <- auc_karolinska %>% mutate(Patient.num = paste0('k',auc_karolinska$Patient.num))
+auc_karolinska <- auc_karolinska %>% mutate(Patient.num = str_split_i(auc_karolinska$Patient.num, '_f', 1))
+
+
 #Merge 2 - raw auc for all labs 
 all_labs_auc <- rbind(auc_beat_aml, auc_karolinska, auc_FIMM, auc_enserink)
-colnames(all_labs_auc)[colnames(all_labs_auc) == "patient_id"] <- "Patient.num"
 colnames(all_labs_auc)[colnames(all_labs_auc) == "pubchem_drug_name"] <- "drug"
 write_csv(all_labs_auc, paste0(dss_output_locatiuon,'auc_calculation_all_labs.csv'))
 
 #Merge 3 - dss and raw auc 
-all_response_metrics <- inner_join(dss_values, all_labs_auc, by=c("Patient.num", "drug"))
+all_response_metrics <- inner_join(dss_values, all_labs_auc, by=c("Patient.num", "drug", "sample"))
 
 ##Save merged file for use in lmm ----
 write_csv(all_response_metrics, paste0(dss_output_locatiuon,'all_response_metrics_all_labs.csv'))

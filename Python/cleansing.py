@@ -37,9 +37,9 @@ pd.set_option('display.max_rows', 100)
 #File locations
 ##Input locations
 original_downloaded_data_location = '/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/'
-karolinska_files = glob.glob('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Karolinska/all_files/' + '*.xlsx')
+karolinska_files = glob.glob('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Karolinska_DSRT/breeze_files_all/' + '*.xlsx')
 ##output locations 
-initial_cleaning_output_loc = '/Users/katarinawilloch/Desktop/UiO/Project 1/Data/test/' #'/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/'
+initial_cleaning_output_loc = '/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Second run/' #'/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial Cleansing/'
 breeze_loc = '/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Breeze/'
 
 
@@ -120,6 +120,36 @@ print("\nDataFrame after exploding 'values' column:")
 print(fimm_df)
 save_df(fimm_df, fr'{initial_cleaning_output_loc}fimm_raw_dose_responses.csv')
 
+fimm_sample_annotation = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_0_Common_sample_annotation_252S.xlsx')
+save_df(fimm_sample_annotation, initial_cleaning_output_loc + 'fimm_sample_annotation')
+
+fimm_clinical_summary = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_1_1_Clinical_summary_186_Patients.xlsx')
+save_df(fimm_clinical_summary , initial_cleaning_output_loc + 'fimm_clinical_summary')
+
+fimm_drug_library = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_2_Drug_library_515D.xlsx')
+save_df(fimm_drug_library , initial_cleaning_output_loc + 'fimm_drug_library')
+
+#fimm_drug_response = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_3_Drug_response_sDSS_164S_17Healthy.xlsx')
+#save_df(fimm_drug_response , initial_cleaning_output_loc + 'fimm_drug_response')
+
+fimm_assay_dets = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_4_DSRT_assay_details_164S_DM.xlsx')
+save_df(fimm_assay_dets , initial_cleaning_output_loc + 'fimm_assay_dets')
+
+fimm_mutation_variant_allele_frequency = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_5_Mutation_Variant_Allele_Frequency_225S_340G.csv')
+save_df(fimm_mutation_variant_allele_frequency , initial_cleaning_output_loc + 'fimm_mutation_variant_allele_frequency')
+
+fimm_binary_mutations = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_6_Binary_mutation_225S_57G.xlsx')
+save_df(fimm_binary_mutations , initial_cleaning_output_loc + 'fimm_binary_mutations')
+
+fimm_rna_seq_healthy = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_7_RNA_seq_CPM_163S_4Healthy.csv')
+save_df(fimm_rna_seq_healthy , initial_cleaning_output_loc + 'fimm_rna_seq_healthy')
+
+fimm_rna_raw_reads = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_8_RNA_seq_Raw_Reads_163S_4Healthy.csv')
+save_df(fimm_rna_raw_reads , initial_cleaning_output_loc + 'fimm_rna_raw_reads')
+
+fimm_seq_sample_annotation = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Functional_Precision_Medicine_Tumor_Board_AML/File_9_RNA-seq_sample_annotation_167S.csv')
+save_df(fimm_seq_sample_annotation , initial_cleaning_output_loc + 'fimm_seq_sample_annotation')
+
 
 #Oslo
 ##Creating copies of the original data and storing them in the common output location
@@ -151,15 +181,17 @@ for files in karolinska_files:
         p_id = match.group(0)
     
     print(f"Part 1: {part1}, Patient_id: {p_id}")
-    df = pd.read_excel(fr'{original_downloaded_data_location}karolinska/all_files/{basename}', sheet_name='EC50')
+    df = pd.read_excel(fr'{original_downloaded_data_location}karolinska_DSRT/breeze_files_all/{basename}', sheet_name='EC50')
     df['sample'] = parts[0]
     df['Patient.num'] = p_id
     print(df)
     karolinska_reponse = pd.concat([karolinska_reponse, df], ignore_index=True)
 
+karolinska_reponse.to_csv(fr'{initial_cleaning_output_loc}karolinska_normalised_reponse_breeze.csv')
+
 #Making concentration of type float
 karolinska_reponse['Max.Conc.tested'] = karolinska_reponse['Max.Conc.tested'].astype('float64')
-
+karolinska_reponse['x'] = 10
 # Melting the DataFrame to long format
 karolinska_reponse_melted = karolinska_reponse.melt(id_vars=['Min.Conc.tested', 'Max.Conc.tested', 'Patient.num', 'DRUG_NAME', 'x', 'sample'], 
                     value_vars=['D1', 'D2', 'D3', 'D4', 'D5'], 

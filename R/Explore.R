@@ -74,7 +74,7 @@ all_response_metrics$DSS2_pos <- all_response_metrics$DSS2 + 0.01
 MASS::boxcox(DSS2_pos ~ lab, 
              data = all_response_metrics,
              lambda = seq(-0.25, 2, length.out = 10))
-
+dev.off()
 all_response_metrics$DSS2_boxcox <- ((all_response_metrics$DSS2)^0.5 - 1) / 0.5
 #Z-scaling (across all patients and all labs) DSS2
 for(j in unique(all_response_metrics$drug)){
@@ -84,7 +84,6 @@ for(j in unique(all_response_metrics$drug)){
 
 #Creating copy of all_response_metrics so it can be displayed in the box-violin plots
 copy_all_response_metrics <- all_response_metrics
-subset(all_response_metrics, drug == "Everolimus" & lab == "Beat AML")
 #remove drug 001, RAD because there are only 3 patients tested for it in the Beat AML cohort
 all_response_metrics <- subset(all_response_metrics, drug != "Everolimus") %>% as.data.frame()
 #dataframe to wide format for the heatmap and ppca
@@ -161,7 +160,7 @@ plot(
   merge_legends = TRUE, 
   padding = unit(c(0, 0, 0, 0), "mm")
 )
-
+dev.off()
 #Save the heatmap plot as a pdf; this was not the dimensions used for the figure in the article (this was done by copying the plot from rstudio)
 pdf(file = paste0(figure_output,"all_labs_dss2_heatmap.pdf"), width = 8, height = 12)  # PDF output
 quartz()
@@ -173,8 +172,7 @@ plot(
   padding = unit(c(0, 0, 0, 0), "mm")
 )
 dev.off()  #Close the graphic device
-
-
+dev.off()
 #----PPCA plot creation----
 #Perform ppca
 ppca <- pca(t(all_response_metrics_wide), method="ppca", nPcs=3, seed=123)
@@ -196,7 +194,7 @@ ggplot(var_df, aes(x = PC, y = Variance)) +
        y = "Percent Variance Explained",
        x = "Principal Component") +
   theme_minimal()
-
+dev.off()
 #Get the estimated complete observations
 ppca_scores <- scores(ppca)
 #Get unique information for each sample by averaging DSS2
@@ -242,7 +240,7 @@ ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color=lab)) 
 #Printing and saving ppca plot
 print(ppca_plot)
 ggsave(paste0(figure_output,"PPCA_plot_all_data_all_labs.png"), plot = ppca_plot, width = 10, height = 8, dpi = 300)
-
+dev.off()
 ##----Average DSS2 PPCA plot ----
 ppca_data$`Average DSS2` <- as.numeric(ppca_data$`Average DSS2`)
 #Creating ppca plot of the first two PCs colored by average DSS2 for each patient in each lab
@@ -287,6 +285,7 @@ dss2_ppca_plot <- ggplot(as.data.frame(ppca_data), aes(x = PC1, y = PC2, color =
 #Printing and saving plot
 print(dss2_ppca_plot)
 ggsave(paste0(figure_output,"avg_dss_score_colorsPPCA_plot_all_data_all_labs_v1.png"), plot = dss2_ppca_plot, width = 10, height = 8, dpi = 300)
+dev.off()
 
 #Help explain the results
 centroids <- ppca_data %>%
@@ -459,6 +458,7 @@ for (m in metrics){
   grid.newpage()
   #Saving combined plot
   ggsave(paste0(figure_output, m, '_heatmap_and_ppca.png'), plot = grid.arrange(ppca_plot_metric, arrangeGrob(heat_g, bottom = blank_space), ncol = 2, widths = c(1, 1)), width = 6.47 * 2, height = 5.94 * 1, dpi = 300)
+  dev.off()
 }
 
 
@@ -566,6 +566,7 @@ for (i in 1:47) {
 #Print and save box-violin plots
 print(g_all_drugs)
 ggsave(paste0(figure_output,"All_drugs_Difference_DSS2_per_drug.png"), plot = g_all_drugs, width = 80, height = 30, units = "cm", limitsize = FALSE)
+dev.off()
 
 #Create box-violin plots for a few drugs for article figure
 g_filtered_data <- grouped_ggbetweenstats( # paired samples
@@ -626,6 +627,7 @@ for (i in 1:4) {
 #Print and save box-violin plots for the 4 drugs; the plot used in the article is copied from R studio not the saved plot
 print(g_filtered_data)
 ggsave(paste0(figure_output, "4_drugs_Difference_DSS2_per_drug.png"), plot = g_filtered_data, width = 8, height = 8, dpi = 300, limitsize = FALSE)
+dev.off()
 
 #Create box-violin plots for BoxCox transformed and z-scaled DSS2 to show there are still significant differences after the transformation
 g_for_transformed_dss2 <- grouped_ggbetweenstats( # paired samples
@@ -716,7 +718,7 @@ for (i in 1:47) {
 #Print and save the plot
 print(g_for_transformed_dss2)
 ggsave(paste0(figure_output,"Difference_box_cox_sclaed_DSS2_per_drug.png"), plot = g_for_transformed_dss2, width = 50, height = 90, units = "cm", limitsize = FALSE)
-
+dev.off()
 
 
 

@@ -165,6 +165,13 @@ save_df(enserink_lab_hill_drug_sensitivity, initial_cleaning_output_loc + 'enser
 enserink_lab_drug_information = get_df(fr'{original_downloaded_data_location}Enserink-lab/Selleck_Drug information.xlsx')
 save_df(enserink_lab_drug_information, initial_cleaning_output_loc + 'enserink_lab_drug_information')
 
+enserink_lab_drug_information = get_df(fr'{original_downloaded_data_location}Enserink-lab/Selleck_Drug information.xlsx')
+save_df(enserink_lab_drug_information, initial_cleaning_output_loc + 'enserink_lab_drug_information')
+
+enserink_lab_sample_annotation = get_df(fr'{original_downloaded_data_location}Enserink-lab/enserink_saple_annotation.xlsx')
+save_df(enserink_lab_sample_annotation, initial_cleaning_output_loc + 'enserink_lab_sample_annotation')
+
+
 
 #Karoslinska
 ##Gathering the files
@@ -211,3 +218,6 @@ karolinska_reponse_melted['CONCENTRATION'][karolinska_reponse_melted['D'] == 'D5
 karolinska_reponse_melted.to_csv(fr'{initial_cleaning_output_loc}karolinska_normalised_reponse_raw.csv')
 karolinska_reponse_melted['patient_sample'] = karolinska_reponse_melted['Patient.num'] + '_'+ karolinska_reponse_melted['sample']
 print(karolinska_reponse_melted[karolinska_reponse_melted['Patient.num'] == 'AML_001'].sort_values(by=['DRUG_NAME', 'sample']))
+
+karolinska_sample_annotation = get_df('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Karolinska_DSRT/clinical_info_Tero_AML_samples_DSRT.csv')
+save_df(karolinska_sample_annotation, initial_cleaning_output_loc + 'karolinska_sample_annotation')

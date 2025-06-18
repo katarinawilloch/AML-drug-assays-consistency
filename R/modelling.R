@@ -1,4 +1,25 @@
-#Import libraries ----
+# -------------------------------------------------------- Script overview
+# Script Name: modelling.R
+# Author: Katarina Willoch
+# Date: 2025-06-01
+#
+# Description:
+# This script reads in dose response metric scores DSS1, DSS2, DSS3, IC50, AUC, rAUC,
+# and reads in experimental variable data 
+# and clinical sample information
+# and merges these datasets
+# and generates linear mixed models for each experimental variable
+# 
+#
+# Sections:
+#   1. Load libraries and data
+#   2. Merge datasets
+#   3. PPCA generation for DSS2
+#   4. Heatmap and PPCA generation for all metrics
+#   5. ggbetweenstats for DSS2
+# -------------------------------------------------------- Script overview
+
+#Install and import libraries ----
 library(lme4)
 library(tidyr)
 library(lattice)
@@ -42,6 +63,12 @@ library(ggplotify)
 library(plotly)
 library(flexplot)
 library(readxl)
+library(MASS)
+library(forestploter)
+require(flexplot)
+library(patchwork)
+
+
 
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
@@ -50,8 +77,1174 @@ if (!requireNamespace(c("sva", "pcaMethods", "ChAMP"), quietly = TRUE))
   BiocManager::install(c("sva", "pcaMethods", "ChAMP"), force = TRUE)
 lapply(c("matrixStats","dplyr","reshape","reshape2", "scales", "drc", "caTools","ggplot2", "data.table", "stringr","MESS", "BiocManager","svMisc", "egg", "pheatmap", "sva", "pcaMethods"), library, character.only = T)
 
-source('~/Desktop/UiO/Project 1/Code/Linear_mixed_model_resport.R')
-source('~/Desktop/UiO/Project 1/Code/model_functions.R')
+source('~/Desktop/UiO/Project 1/Code/R/Linear_mixed_model_resport.R')
+source('~/Desktop/UiO/Project 1/Code/R/model_functions.R')
+
+#Figure output location
+figure_output <- '~/Desktop/UiO/Project 1/Figures/New karolinska data/'
+initial_cleansing <- "~/Desktop/UiO/Project 1/Data/Second run/"
+
+#Import datset containing all metric responses
+all_response_metrics <- read_csv('~/Desktop/UiO/Project 1/Data/Response scores/all_response_metrics_all_labs.csv')
+#Removing data without sample id
+all_response_metrics <- all_response_metrics[!is.na(all_response_metrics$Patient.num),]
+#Renaming drugs to first letter capital and rest lower case
+all_response_metrics <- all_response_metrics %>% mutate(drug = ifelse(drug == 'PONATINIB', 'Ponatinib', drug))
+all_response_metrics <- all_response_metrics %>% mutate(drug = ifelse(drug == 'MOMELOTINIB', 'Momelotinib', drug))
+all_response_metrics <- all_response_metrics %>% mutate(Patient.num = ifelse(lab == 'Karolinska', paste0(Patient.num, sample), Patient.num))
+all_response_metrics$drug <- tools::toTitleCase(all_response_metrics$drug)
+#Convert the column to a factor with the specific order
+specific_order <- c("Beat AML", "Oslo", "Helsinki", "Karolinska")
+all_response_metrics$lab <- factor(all_response_metrics$lab, levels = specific_order)
+#Creating new variable for negative log10 IC50
+all_response_metrics$log10IC50 <- -log10(all_response_metrics$IC50)
+
+
+#Merging clinical sample information with calculated metrics for each lab ----
+##Karolinska
+karolinska_sample_info <- read_csv(paste0(initial_cleansing,'karolinska_sample_annotation.csv'))
+###Rename column headers
+karolinska_sample_info <- karolinska_sample_info %>%
+  dplyr::rename(
+    "Patient.num" = "Running_ID",
+    "Disease.status" = "diagnosis",
+    "Tissue" = "Sample_type", 
+    "sample" = "cohort"
+  )
+###Rename Tissue values
+karolinska_sample_info$Tissue <- gsub('BM_blank', 'Bone marrow', karolinska_sample_info$Tissue)
+karolinska_sample_info$Tissue <- gsub('BM', 'Bone marrow', karolinska_sample_info$Tissue)
+karolinska_sample_info$Tissue <- gsub('PB', 'Blood', karolinska_sample_info$Tissue)
+###Rename Disease.status values
+karolinska_sample_info$Disease.status <- gsub('de_novo', 'Diagnosis', karolinska_sample_info$Disease.status)
+karolinska_sample_info$Disease.status <- gsub('relapse', 'Relapse', karolinska_sample_info$Disease.status)
+###Rename sample values
+karolinska_sample_info$sample <- gsub('prospective', 'fresh', karolinska_sample_info$sample)
+karolinska_sample_info$sample <- gsub('retrospective', 'frozen', karolinska_sample_info$sample)
+###Rename sample ids to distinguish from Helsinki sample ids
+karolinska_sample_info <- karolinska_sample_info %>% mutate(Patient.num = paste0('k',karolinska_sample_info$Patient.num,sample))
+#Merge Karolinska sample annotation and response metric dataset
+all_response_metrics <- left_join(all_response_metrics, karolinska_sample_info[,c('Patient.num', 'Tissue', 'Disease.status')], by=c('Patient.num'))
+
+##Oslo
+enserink_sample_annotation <- read_csv(paste0(initial_cleansing,'enserink_lab_sample_annotation.csv'))
+###Rename column headers
+enserink_sample_annotation <- enserink_sample_annotation %>%
+  dplyr::rename(
+    "Patient.num" = "Patient",
+    "Cells1" = "Cells/well",
+    "Plate_reader1" = "Instrument", 
+    "sample" = "Fresh or frozen"
+  )
+
+###Rename Tissue values
+enserink_sample_annotation$Tissue <- gsub('BM', 'Bone marrow', enserink_sample_annotation$Tissue)
+enserink_sample_annotation$Tissue <- gsub('PB', 'Blood', enserink_sample_annotation$Tissue)
+###Get Disease status values from Patient.num
+enserink_sample_annotation <- enserink_sample_annotation %>% mutate(Disease.status = str_split_i(enserink_sample_annotation$Patient.num, '_', 2))
+enserink_sample_annotation[is.na(enserink_sample_annotation$Disease.status),]$Disease.status <- 'Diagnosis'
+###Rename Disease.status values
+enserink_sample_annotation$Disease.status <- gsub('relapse', 'Relapse', enserink_sample_annotation$Disease.status)
+enserink_sample_annotation$Disease.status <- gsub('remission2', 'remission', enserink_sample_annotation$Disease.status)
+###Rename sample values 
+enserink_sample_annotation$sample <- gsub('Fresh', 'fresh', enserink_sample_annotation$sample)
+###Categorize number of cells per well per sample
+enserink_sample_annotation <- enserink_sample_annotation %>% mutate(Cells1 = case_when(Cells1 > 5000 ~"10000", 
+                                                                                       Cells1 == 5000 ~ "5000", 
+                                                                                       Cells1 < 5000 ~ NA,
+                                                                                       TRUE ~ NA))
+
+all_response_metrics <- left_join(all_response_metrics, enserink_sample_annotation[,c('Patient.num', 'Tissue', 'Disease.status', 'sample')], by = "Patient.num") %>%
+  mutate(
+    Tissue = coalesce(Tissue.x, Tissue.y),
+    sample = coalesce(sample.x, sample.y), 
+    Disease.status = coalesce(Disease.status.x, Disease.status.y)
+  ) %>%
+  select(-Tissue.x, -Tissue.y, -sample.x, -sample.y, -Disease.status.x, -Disease.status.y)
+##Helsinki
+fimm_sample_information <- read.csv(paste0(initial_cleansing,'fimm_assay_dets.csv'))
+colnames(fimm_sample_information)[colnames(fimm_sample_information) == "Medium"] <- "Medium1"
+fimm_sample_information$Medium1 <- gsub("MCM", 'Mononuclear cell medium', fimm_sample_information$Medium1)
+fimm_sample_information$Medium1 <- gsub("CM", 'HS-5 conditioned medium', fimm_sample_information$Medium1)
+colnames(fimm_sample_information)[colnames(fimm_sample_information) == "Sample_ID"] <- "Patient.num"
+fimm_sample_annotation <- read.csv(paste0(initial_cleansing,'fimm_sample_annotation.csv'))
+colnames(fimm_sample_annotation)[colnames(fimm_sample_annotation) == "Sample_ID"] <- "Patient.num"
+fimm_sample_annotation$Patient_ID <- gsub("FPM_", "", fimm_sample_annotation$Patient_ID)
+fimm_clinical_info <- read_csv(paste0(initial_cleansing,'fimm_clinical_summary.csv'))
+fimm_clinical_info$sample <- ifelse(fimm_clinical_info$Site == "Helsinki", 'fresh', 'frozen')
+###Merging the halsinki sample annotation files
+helsinki_sample_annotation <- merge(unique(fimm_sample_information[,c('Patient_ID', 'Patient.num', 'Medium1')]), fimm_sample_annotation[,c('Patient_ID', 'Patient.num', 'Disease.status', 'Tissue')], by = c("Patient_ID", "Patient.num"), all=TRUE)
+helsinki_sample_annotation <- left_join(helsinki_sample_annotation, fimm_clinical_info[,c('Patient_ID','sample')], by = "Patient_ID")
+#Merge Helsinki sample information and drug response metrics
+all_response_metrics <- left_join(all_response_metrics, helsinki_sample_annotation, by = "Patient.num") %>%
+  mutate(
+    Tissue = coalesce(Tissue.x, Tissue.y),
+    sample = coalesce(sample.x, sample.y), 
+    Disease.status = coalesce(Disease.status.x, Disease.status.y), 
+    Medium1 = coalesce(Medium1.x, Medium1.y)
+  ) %>%
+  select(-Tissue.x, -Tissue.y, -sample.x, -sample.y, -Disease.status.x, -Disease.status.y, -Medium1.x, -Medium1.y)
+
+subset(all_response_metrics, lab == 'Helsinki')
+###Beat AML
+beat_aml_clinical_info <- read_csv(paste0(initial_cleansing,'beat_aml_clinical.csv'))
+beat_aml_clinical_info <- beat_aml_clinical_info %>% mutate(Patient.num = paste0(beat_aml_clinical_info$dbgap_subject_id, '_', dbgap_dnaseq_sample, '_', dbgap_rnaseq_sample))
+colnames(beat_aml_clinical_info)[colnames(beat_aml_clinical_info) == "specimenType"] <- "Tissue"
+colnames(beat_aml_clinical_info)[colnames(beat_aml_clinical_info) == "diseaseStageAtSpecimenCollection"] <- "Disease.status"
+beat_aml_clinical_info$Tissue <- gsub('Bone Marrow Aspirate', 'Bone marrow', beat_aml_clinical_info$Tissue)
+beat_aml_clinical_info$Tissue <- gsub('Peripheral Blood', 'Blood', beat_aml_clinical_info$Tissue)
+beat_aml_clinical_info$Disease.status <- gsub('Initial ', '', beat_aml_clinical_info$Disease.status)
+beat_aml_clinical_info$Disease.status <- gsub('Residual', 'Refractory', beat_aml_clinical_info$Disease.status)
+beat_aml_clinical_info$Disease.status <- gsub('Unknown', NA, beat_aml_clinical_info$Disease.status)
+beat_aml_clinical_info$sample <- 'fresh'
+#beat_aml_clinical_info <- beat_aml_clinical_info %>% mutate(Patient_ID = sub("_.*", "", Patient.num))
+all_response_metrics <- left_join(all_response_metrics, subset(beat_aml_clinical_info, select = c("Patient.num", "Disease.status", "Tissue", "sample")), by = "Patient.num") %>%
+  mutate(
+    Tissue = coalesce(Tissue.x, Tissue.y),
+    sample = coalesce(sample.x, sample.y), 
+    Disease.status = coalesce(Disease.status.x, Disease.status.y)
+  ) %>%
+  select(-Tissue.x, -Tissue.y, -sample.x, -sample.y, -Disease.status.x, -Disease.status.y)
+
+subset(all_response_metrics, lab == 'Beat AML')
+
+#Getting sample counts for table in article----
+##Karolinska
+karolinska_count_disease_status <- subset(all_response_metrics[all_response_metrics$lab == 'Karolinska',], select = c("Patient.num", "Disease.status")) %>% distinct() %>% group_by(Disease.status) %>% dplyr::summarize(count = n())
+print(karolinska_count_disease_status)
+karolinska_count_tissue <- subset(all_response_metrics[all_response_metrics$lab == 'Karolinska',], select = c("Patient.num", "Tissue")) %>% distinct() %>% group_by(Tissue) %>% dplyr::summarize(count = n())
+print(karolinska_count_tissue)
+karolinska_count_sample <- subset(all_response_metrics[all_response_metrics$lab == 'Karolinska',], select = c("Patient.num", "sample")) %>% distinct() %>% group_by(sample) %>% dplyr::summarize(count = n())
+print(karolinska_count_sample)
+karolinska_count <- subset(all_response_metrics[all_response_metrics$lab == 'Karolinska',], select = c("Patient.num")) %>% distinct() %>% dplyr::summarize(count = n())
+print(karolinska_count)
+##Oslo
+oslo_count_disease_status <- subset(all_response_metrics[all_response_metrics$lab == 'Oslo',], select = c("Patient.num", "Disease.status")) %>% distinct() %>% group_by(Disease.status) %>% dplyr::summarize(count = n())
+print(oslo_count_disease_status)
+oslo_count_tissue <- subset(all_response_metrics[all_response_metrics$lab == 'Oslo',], select = c("Patient.num", "Tissue")) %>% distinct() %>% group_by(Tissue) %>% dplyr::summarize(count = n())
+print(oslo_count_tissue)
+oslo_count_sample <- subset(all_response_metrics[all_response_metrics$lab == 'Oslo',], select = c("Patient.num", "sample")) %>% distinct() %>% group_by(sample) %>% dplyr::summarize(count = n())
+print(oslo_count_sample)
+oslo_count <- subset(all_response_metrics[all_response_metrics$lab == 'Oslo',], select = c("Patient.num")) %>% distinct() %>% dplyr::summarize(count = n())
+print(oslo_count)
+##Helsinki
+helsinki_count_disease_status <- subset(all_response_metrics[all_response_metrics$lab == 'Helsinki',], select = c("Patient.num", "Disease.status")) %>% distinct() %>% group_by(Disease.status) %>% dplyr::summarize(count = n())
+print(helsinki_count_disease_status)
+helsinki_count_tissue <- subset(all_response_metrics[all_response_metrics$lab == 'Helsinki',], select = c("Patient.num", "Tissue")) %>% distinct() %>% group_by(Tissue) %>% dplyr::summarize(count = n())
+print(helsinki_count_tissue)
+helsinki_count_sample <- subset(all_response_metrics[all_response_metrics$lab == 'Helsinki',], select = c("Patient.num", "sample")) %>% distinct() %>% group_by(sample) %>% dplyr::summarize(count = n())
+print(helsinki_count_sample)
+helsinki_count <- subset(all_response_metrics[all_response_metrics$lab == 'Helsinki',], select = c("Patient.num")) %>% distinct() %>% dplyr::summarize(count = n())
+print(helsinki_count)
+##Beat AML
+beat_aml_count_disease_status <- subset(all_response_metrics[all_response_metrics$lab == 'Beat AML',], select = c("Patient.num", "Disease.status")) %>% distinct() %>% group_by(Disease.status) %>% dplyr::summarize(count = n())
+print(beat_aml_count_disease_status)
+beat_aml_count_tissue <- subset(all_response_metrics[all_response_metrics$lab == 'Beat AML',], select = c("Patient.num", "Tissue")) %>% distinct() %>% group_by(Tissue) %>% dplyr::summarize(count = n())
+print(beat_aml_count_tissue)
+beat_aml_count_sample <- subset(all_response_metrics[all_response_metrics$lab == 'Beat AML',], select = c("Patient.num", "sample")) %>% distinct() %>% group_by(sample) %>% dplyr::summarize(count = n())
+print(beat_aml_count_sample)
+beat_aml_count <- subset(all_response_metrics[all_response_metrics$lab == 'Beat AML',], select = c("Patient.num")) %>% distinct() %>% dplyr::summarize(count = n())
+print(beat_aml_count)
+
+#Experimental data----
+experimental_var <- read_delim(paste0(initial_cleansing,'experimental_variables.csv'), delim=';')
+experimental_var[experimental_var$lab == 'Helsinki','medium'] <- NA
+
+#Merging experimental data and response data----
+all_response_metrics <- left_join(all_response_metrics, subset(experimental_var, select = -c(sample)), by = 'lab')
+#all_response_metrics <- all_response_metrics %>% mutate(nr_of_concentration_points_cat = as.character(nr_of_concentration_points)) %>% as.data.frame()
+all_response_metrics <- all_response_metrics %>% mutate(cells = as.character(cells)) %>% as.data.frame()
+all_response_metrics <- all_response_metrics %>%
+  mutate(medium = if_else(lab == 'Helsinki', Medium1, medium))
+all_response_metrics$Cells1 <- as.character(all_response_metrics$Cells1)
+all_response_metrics <- all_response_metrics %>%
+  mutate(cells = if_else(lab == 'Oslo', Cells1, cells))
+all_response_metrics <- all_response_metrics %>%
+  mutate(plate_reader = if_else(lab == 'Oslo', Plate_reader1, plate_reader))
+all_response_metrics <- all_response_metrics %>%
+  mutate(time_until_sample_usage = if_else(sample == 'Frozen', NA, time_until_sample_usage))
+
+
+all_response_metrics$Disease.status <- gsub('remission', 'Remission', all_response_metrics$Disease.status)
+all_response_metrics$Disease.status <- gsub('Unknown', NA, all_response_metrics$Disease.status)
+all_response_metrics$sample <- gsub('Cryopreserved', 'frozen', all_response_metrics$sample)
+all_response_metrics$Tissue <- gsub('Leukapheresis', 'Blood', all_response_metrics$Tissue)
+all_response_metrics$lab <- gsub('BeatAML', 'Beat AML', all_response_metrics$lab)
+
+
+all_response_metrics$Patient_ID <- all_response_metrics$Patient.num
+all_response_metrics <- all_response_metrics %>% dplyr::mutate(Patient_ID = ifelse(lab == 'Oslo' | lab == "Beat AML", gsub("_.*", "", Patient_ID), Patient_ID)) %>%
+  dplyr::mutate(Patient_ID = ifelse(lab == 'Helsinki', str_extract(Patient_ID, "^[^_]+_[^_]+"), Patient_ID)) 
+all_response_metrics <- all_response_metrics %>% dplyr::mutate(Patient_ID = ifelse(lab == 'Karolinska', gsub('f.*', '', Patient_ID), Patient_ID))
+
+unique(subset(all_response_metrics, lab == 'Karolinska', select = c('Patient.num', 'Patient_ID')))
+
+write_csv(all_response_metrics, paste0(initial_cleansing,'all_metrices_all_labs_with_experimental_var.csv'))
+
+
+patient_count <- subset(all_response_metrics, select = c("Patient_ID", "lab")) %>%distinct() %>% group_by(lab) %>% dplyr::summarize(count = n())
+print(patient_count)
+
+
+#Modeling----
+##Box Cox transformation and Z scaling----
+###DSS2----
+all_response_metrics$DSS2_pos <- all_response_metrics$DSS2 + 0.01
+MASS::boxcox(DSS2_pos ~ time_until_sample_usage, 
+             data = all_response_metrics,
+             lambda = seq(-0.25, 2, length.out = 10))
+
+all_response_metrics$DSS2_boxcox <- ((all_response_metrics$DSS2)^0.5 - 1) / 0.5
+
+for(j in unique(all_response_metrics$drug)){
+  all_response_metrics$DSS2_boxcox_sclaed2[all_response_metrics$drug==j] <-
+    scale(all_response_metrics$DSS2_boxcox[all_response_metrics$drug==j])
+}
+
+###AUC----
+all_response_metrics$AUC_pos <- all_response_metrics$AUC + 0.01
+MASS::boxcox(AUC_pos ~ time_until_sample_usage, 
+             data = all_response_metrics,
+             lambda = seq(-0.25, 2, length.out = 10))
+
+all_response_metrics$AUC_boxcox <- ((all_response_metrics$AUC)^0.5 - 1) / 0.5
+
+for(j in unique(all_response_metrics$drug)){
+  all_response_metrics$AUC_boxcox_sclaed2[all_response_metrics$drug==j] <-
+    scale(all_response_metrics$AUC_boxcox[all_response_metrics$drug==j])
+}
+
+ggplot(all_response_metrics, aes(x=AUC)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(all_response_metrics, aes(x=AUC_boxcox)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(all_response_metrics, aes(x=AUC_boxcox_sclaed2)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+###IC50----
+all_response_metrics$IC50_pos <- all_response_metrics$IC50 + 0.01
+MASS::boxcox(IC50_pos ~ time_until_sample_usage, 
+             data = all_response_metrics,
+             lambda = seq(-0.25, 2, length.out = 10))
+
+
+all_response_metrics <- all_response_metrics %>% mutate(IC50_boxcox = ifelse(-log10(all_response_metrics$IC50) == 0, 0, -log10(all_response_metrics$IC50)))
+
+for(j in unique(all_response_metrics$drug)){
+  all_response_metrics$IC50_boxcox_sclaed2[all_response_metrics$drug==j] <-
+    scale(all_response_metrics$IC50_boxcox[all_response_metrics$drug==j])
+}
+
+ggplot(all_response_metrics, aes(x=IC50)) +
+  geom_density(color="darkblue", fill="lightblue") + 
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("IC50")
+
+ggplot(all_response_metrics, aes(x=IC50_boxcox)) +
+  geom_density(color="darkblue", fill="lightblue") + theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed IC50")
+
+ggplot(all_response_metrics, aes(x=IC50_boxcox_sclaed2)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled IC50")
+
+
+###DSS1----
+all_response_metrics$DSS1_pos <- all_response_metrics$DSS1 + 0.01
+MASS::boxcox(DSS1_pos ~ lab, 
+             data = all_response_metrics,
+             lambda = seq(-0.25, 2, length.out = 10))
+
+all_response_metrics$DSS1_boxcox <-  ((all_response_metrics$DSS1)^0.5 - 1) / 0.5
+
+for(j in unique(all_response_metrics$drug)){
+  all_response_metrics$DSS1_boxcox_sclaed2[all_response_metrics$drug==j] <-
+    scale(all_response_metrics$DSS1_boxcox[all_response_metrics$drug==j])
+}
+
+
+ggplot(all_response_metrics, aes(x=DSS1_boxcox)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(all_response_metrics, aes(x=DSS1_boxcox_sclaed2)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+###DSS3----
+all_response_metrics$DSS3_pos <- all_response_metrics$DSS3 + 0.01
+MASS::boxcox(DSS3_pos ~ lab, 
+             data = all_response_metrics,
+             lambda = seq(-0.25, 2, length.out = 10))
+
+all_response_metrics$DSS3_boxcox <- ((all_response_metrics$DSS3)^0.5 - 1) / 0.5
+
+for(j in unique(all_response_metrics$drug)){
+  all_response_metrics$DSS3_boxcox_sclaed2[all_response_metrics$drug==j] <-
+    scale(all_response_metrics$DSS3_boxcox[all_response_metrics$drug==j])
+}
+
+
+ggplot(all_response_metrics, aes(x=DSS3_boxcox)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(all_response_metrics, aes(x=DSS3_boxcox_sclaed2)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+###Raw AUC----
+all_response_metrics$auc_a_pos <- all_response_metrics$auc_a - min(all_response_metrics$auc_a) + 0.1
+MASS::boxcox(auc_a_pos ~ lab, 
+             data = all_response_metrics,
+             lambda = seq(-0.25, 2, length.out = 10))
+
+all_response_metrics$auc_a_boxcox <- ((all_response_metrics$auc_a)^0.5 - 1) / 0.5
+
+for(j in unique(all_response_metrics$drug)){
+  all_response_metrics$auc_a_boxcox_sclaed2[all_response_metrics$drug==j] <-
+    scale(all_response_metrics$auc_a_boxcox[all_response_metrics$drug==j])
+}
+
+ggplot(all_response_metrics, aes(x=auc_a_boxcox)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(all_response_metrics, aes(x=auc_a_boxcox_sclaed2)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(all_response_metrics, aes(x=auc_a)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+
+##LMM for each experimental variable----
+# List of models and their names
+variables <- c("time_until_sample_usage", "medium", "cells", "positive_control", "centrifugation_procedure", "plate_reader")
+metrics <- c("IC50", "DSS1", "DSS2", "DSS3", "auc_a", "AUC")
+models <- list()
+for (m in metrics[1:6]){
+  for (v in variables){
+    model_name_plot <- case_when(v == "time_until_sample_usage" ~ "time until usage", 
+                                 v == "microenvironmental_stimuli" ~ "microenvironmental stimuli", 
+                                 v == "positive_control" ~ "positive control-doses-readout-cell counting", 
+                                 v == "centrifugation_procedure" ~ "centrifugation procedure", 
+                                 v == "plate_reader" ~ "plate reader",
+                                 .default = v)
+    print(m)
+    print(v)
+    m_box <- paste0(m, "_boxcox_sclaed2")
+    # Construct formula as a string
+    formula_str <- paste0(m_box, " ~ ", v, " + (1|Patient.num)", " + (",v,"|drug)")
+    # Convert string to formula
+    f <- as.formula(formula_str)
+    model_name <- paste0(m, "_by_", v)
+    models[[model_name]] <- lmer(f,all_response_metrics)
+    #model_diagnostics(models[[model_name]], paste0("/Users/katarinawilloch/Desktop/UiO/Project 1/Code/Diagnostic plots/", m, "/", v, "/"), model_name = model_name_plot, metric = m) 
+    print(summary(models[[model_name]]))
+  }
+}
+
+
+##Forestplot DSS2----
+dss2_cols <- grep("DSS2", names(models), value = TRUE)
+dss2_models <- unlist(models[dss2_cols], use.names = FALSE)
+#Get confidence intervals og p values from function in model_functions.R
+df_re_intercept_models <- model_results(dss2_models, data_frame_org = all_response_metrics)
+#Rename random_effect_term values
+df_re_intercept_models$Random_Effect_Term <- '(1 | Patient.num) + (1 + Experimental var | drug)'
+#Rename df headers
+colnames(df_re_intercept_models) <- gsub("_", " ", colnames(df_re_intercept_models))     
+colnames(df_re_intercept_models) <- sapply(colnames(df_re_intercept_models), tools::toTitleCase)
+df_re_intercept_models <- df_re_intercept_models %>% dplyr::rename(
+  `Experimental Variable` = `Fixed Effect Term`,
+  `Reference Group` = `Ref Group`
+)
+#If corrected p value is bigger than 1 return 1
+df_re_intercept_models <- df_re_intercept_models %>% mutate(`Corrected p Value` = ifelse(df_re_intercept_models$`p Value`*df_re_intercept_models$Count >= 1, 1, df_re_intercept_models$`p Value`*df_re_intercept_models$Count))
+#Rename Reference group values
+df_re_intercept_models <- df_re_intercept_models %>% mutate(`Reference Condition` = case_when(`Reference Group` ==  "a drug combination of flavopiridol, staurosporine and velcade" ~ "Positive Control: drug combination + Doses: 7 \n+ Readout: CellTiter96     ", 
+                                                                                              `Reference Group` ==  "1-2h after receiving" ~ "Time until sample usage <2h",
+                                                                                              `Reference Group` ==  "HS-5 conditioned medium" ~ "HS-5 CM",
+                                                                                              `Reference Group` ==  "HS-5 CM" ~ "HS-5 CM",
+                                                                                              `Reference Group` ==  "Ficoll-Paque centrifugation" ~ "Ficoll-Paque",
+                                                                                              `Reference Group` ==  "10000" ~ "10000",
+                                                                                              `Reference Group` ==  "Countess" ~ "Countess",
+                                                                                              `Reference Group` ==  "Biotek Synergy 2" ~ "Biotek Synergy 2",
+                                                                                              TRUE ~ `Reference Group`))
+
+#Forest plot theme
+tm <- forest_theme(base_size =9,
+                   arrow_type = "closed",
+                   base_family = "Arial",
+                   footnote_gp = gpar(col = "black", cex = 1.0, size = 12, family = "Arial"), 
+                   line_size = 0.5, 
+                   align = "center", 
+                   footnote_parse = F, 
+                   xlab_gp = gpar(fontsize = 14, fontfamily = "Arial", cex=1),
+                   xaxis_gp = gpar(fontsize = 14, fontfamily = "Arial", cex=1), 
+                   xlab_adjust = "center")
+#For bars in plot
+df_re_intercept_models$` ` <- paste(rep(" ", 30), collapse = " ")
+#Order by coefficient
+df_re_intercept_models <- df_re_intercept_models[order(df_re_intercept_models$`Fixed Effect Coefficient`),]
+#Round corrected p value to 4 decimal points
+df_re_intercept_models$`p-valueᵃ` <- round(df_re_intercept_models$`Corrected p Value`, 4)
+df_re_intercept_models$`p-valueᵃ` <- format(df_re_intercept_models$`p-valueᵃ`, scientific = FALSE, trim = TRUE)
+df_re_intercept_models <- df_re_intercept_models %>% mutate(`p-valueᵃ` = ifelse(df_re_intercept_models$`p-valueᵃ` == '0.0000', '<0.0001', as.character(df_re_intercept_models$`p-valueᵃ`)))
+
+p <- forest(df_re_intercept_models[,c('Experimental Variable','Reference Condition', ' ', 'p-valueᵃ')],
+            est = df_re_intercept_models$`Fixed Effect Coefficient`,
+            lower = df_re_intercept_models$Lower, 
+            upper = df_re_intercept_models$Upper,
+            sizes = 1,
+            ci_column = 3,
+            ref_line = 0,
+            grid = F,
+            #arrow_lab = c("Lower DSS2 than reference group", "Higher DSS2 than refernce group"),
+            xlim = c(-1.1, 1.1),
+            #ticks_at = c(-1, -0.5, 0, 0.5, 1),
+            #footnote = "\n\nᵃBonferroni corrected",
+            theme = tm, 
+            xlab = expression('Change in Scaled DSS'[2]),
+            legend_gp = gpar(fontsize = 18, fontfamily = "Arial", cex = 1),
+            xaxis_gp = gpar(fontsize = 28, fontfamily = "Arial", cex=1)
+) 
+
+print(p)
+
+###Save forestplot DSS2----
+# Define the physical dimensions (cm) and resolution
+output_width_cm <- 16.4#14.4 #9.5
+output_height_cm <- 16#14 #10
+dpi <- 300  # Resolution in dots per inch
+
+# Convert cm to inches (1 inch = 2.54 cm)
+output_width_in <- output_width_cm / 2.54
+output_height_in <- output_height_cm / 2.54
+
+# Convert inches to pixels for the PNG device
+output_width_px <- output_width_in * dpi
+output_height_px <- output_height_in * dpi
+
+# Calculate scaling factors for the gtable
+scale_width <- output_width_cm / 10  # Base width adjustment (10 cm as reference)
+scale_height <- output_height_cm / 10  # Base height adjustment (10 cm as reference)
+
+p <- edit_plot(p, gp = gpar(cex=1.7, fontfamily="Arial")) #1.4
+p <- edit_plot(p, part = "header", gp = gpar(cex=1.7, fontfamily="Arial"))
+
+p <- edit_plot(p, col = 4, part = "header",
+               which = "text",
+               hjust = unit(0.5, "npc"),
+               x = unit(0.5, "npc"))
+p <- edit_plot(p, col = 4, part = "body",
+               which = "text",
+               hjust = unit(0.5, "npc"),
+               x = unit(0.5, "npc"))
+
+
+# Scale the gtable layout
+scaled_p <- gtable::gtable_filter(p, pattern = ".*", trim = TRUE)  # Keep all grobs
+scaled_p$widths <- scaled_p$widths * scale_width
+scaled_p$heights <- scaled_p$heights * scale_height
+
+png(paste0(figure_output,'Forest_plot_DSS2.png'), height = 16, width = 46, unit = "cm", res = 300)
+grid.newpage()
+grid.draw(scaled_p)
+dev.off()
+
+##Forestplot all metrics----
+#Get confidence intervals og p values from function in model_functions.R
+df_lmm_results_all_metrics <- model_results(models, data_frame_org = all_response_metrics)
+#If corrected p value is bigger than 1 return 1
+df_lmm_results_all_metrics <- df_lmm_results_all_metrics %>% mutate(corrected_p_value = ifelse(df_lmm_results_all_metrics$p_value * df_lmm_results_all_metrics$count >= 1, 1, df_lmm_results_all_metrics$p_value * df_lmm_results_all_metrics$count))
+#Round corrected p value to 4 decimal points
+df_lmm_results_all_metrics$corrected_p_value <- round(df_lmm_results_all_metrics$corrected_p_value, 4)
+df_lmm_results_all_metrics$corrected_p_value <- format(df_lmm_results_all_metrics$corrected_p_value, scientific = FALSE, trim = TRUE)
+#If corrected p value is smaller than 0.0001 return <0.0001
+df_lmm_results_all_metrics <- df_lmm_results_all_metrics %>% mutate(corrected_p_value = ifelse(df_lmm_results_all_metrics$corrected_p_value == '0.0000', '<0.0001', as.character(df_lmm_results_all_metrics$corrected_p_value)))
+#Rename reference group values
+df_lmm_results_all_metrics <- df_lmm_results_all_metrics %>% mutate(ref_group = case_when(ref_group ==  "a drug combination of flavopiridol, staurosporine and velcade" ~ "Positive Control: drug combination + Doses: 7 \n+ Readout: CellTiter96     ", 
+                                          ref_group ==  "1-2h after receiving" ~ "Time until sample usage < 2h",
+                                          ref_group ==  "HS-5 conditioned medium" ~ "HS-5 CM",
+                                          ref_group ==  "HS-5 CM" ~ "HS-5 CM",
+                                          ref_group ==  "Ficoll-Paque centrifugation" ~ "Ficoll-Paque",
+                                          ref_group ==  "10000" ~ "10000",
+                                          ref_group ==  "Countess" ~ "Countess",
+                                          ref_group ==  "Biotek Synergy 2" ~ "Biotek Synergy 2",
+                                          TRUE ~ ref_group))
+#Rename random effect term values
+df_lmm_results_all_metrics$Random_Effect_Term <- '(1 | Patient.num) + (1 + Experimental var | drug)'
+#Rename column headers
+colnames(df_lmm_results_all_metrics) <- gsub("_", " ", colnames(df_lmm_results_all_metrics))     
+colnames(df_lmm_results_all_metrics) <- sapply(colnames(df_lmm_results_all_metrics), tools::toTitleCase)
+df_lmm_results_all_metrics <- df_lmm_results_all_metrics %>% dplyr::rename(
+  'Experimental Variable' = 'Fixed Effect Term',
+  'Reference Condition' = 'Ref Group'
+)
+# #Rename fixed effect terms
+# df_lmm_results_all_metrics <- df_lmm_results_all_metrics %>% mutate(`Fixed Effect Term` = case_when(`Fixed Effect Term` ==  "Positive Control: BzCl + Doses: 5 + Readout: CellTiter-Glo" ~ "Positive Control: BzCl + Doses: 5 \n+ Readout: CellTiter-Glo",
+#                                                     `Fixed Effect Term` == "Microenvironmental Stimuli: Co-culture with activation" ~ "Microenvironmental Stimuli:\nCo-culture with activation", 
+#                                                     `Fixed Effect Term` == "Centrifugation Procedure: LymphoPrepTM gradient centrifugation" ~ "Centrifugation Procedure: \nLymphoPrep\u2122 gradient", 
+#                                                     TRUE ~ `Fixed Effect Term`))
+
+#df_lmm_results_all_metrics <- df_lmm_results_all_metrics[order(df_lmm_results_all_metrics$`Fixed Effect Coefficient`),]
+df_lmm_results_all_metrics <- df_lmm_results_all_metrics %>%
+  arrange('Fixed Effect Coefficient', 'Response Metric', 'Experimental Variable')
+colnames(df_lmm_results_all_metrics)
+df_lmm_results_all_metrics_wide <- df_lmm_results_all_metrics[,c('Experimental Variable', 'Reference Condition', 'Response Metric', 'Fixed Effect Coefficient', 'Lower', 'Upper', 'Corrected p Value')] %>%
+  pivot_wider(names_from = `Response Metric`, values_from = c(`Fixed Effect Coefficient`, Lower, Upper, `Corrected p Value`)) 
+df_lmm_results_all_metrics_wide$` ` <- paste(rep(" ", 30), collapse = " ")
+
+# Create a color theme vector to map colors to each dose response metric 
+category_colors <- c("#8dd3c7", "#fccde5", "#bebada", "#fb8072", "#fdb462", "#b3de69")
+
+#Define theme for the forest plot
+tm <- forest_theme(
+  base_size = 12,
+  arrow_type = "closed",
+  line_size = 1.5, 
+  align = "center", 
+  ci_fill = category_colors,
+  footnote_gp = gpar(col = "black", cex = 1.0, fontsize = 18), 
+  footnote_parse = FALSE, 
+  legend_name = "   ",#Response Metric
+  legend_position = "bottom",
+  legend_value = c(expression("IC"[50]), expression(" DSS"[3]), expression(" DSS"[2]), expression(" DSS"[1]), " rAUC", " AUC"), 
+  legend_gp = gpar(fontsize = 18, fontfamily = "Arial", cex = 1),
+  xaxis_gp = gpar(fontsize = 18, fontfamily = "Arial"), 
+  spacing = 3,
+)
+
+names(df_lmm_results_all_metrics_wide) <- str_replace_all(names(df_lmm_results_all_metrics_wide), '_', ' ')
+names(df_lmm_results_all_metrics_wide) <- str_replace_all(names(df_lmm_results_all_metrics_wide), ':', '')
+df_lmm_results_all_metrics_wide <- df_lmm_results_all_metrics_wide %>% dplyr::rename(
+  `DSS2` = `Corrected p Value DSS2 Box Cox Transformed and Scaled`,
+  `IC50` = `Corrected p Value IC50 boxcox sclaed2`
+)
+df_lmm_results_all_metrics_wide <- df_lmm_results_all_metrics_wide[order(df_lmm_results_all_metrics_wide$`Fixed Effect Coefficient DSS2 Box Cox Transformed and Scaled`),]
+
+# Create the forest plot with different colors for each category bar
+p1_all_metric <- forest(
+  df_lmm_results_all_metrics_wide[, c("Experimental Variable","Reference Condition", " ", "DSS2", "IC50")],              # Main label column
+  est = list(df_lmm_results_all_metrics_wide$`Fixed Effect Coefficient IC50 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Fixed Effect Coefficient DSS3 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Fixed Effect Coefficient DSS2 Box Cox Transformed and Scaled`, df_lmm_results_all_metrics_wide$`Fixed Effect Coefficient DSS1 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Fixed Effect Coefficient auc a boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Fixed Effect Coefficient AUC boxcox sclaed2`),
+  lower = list(df_lmm_results_all_metrics_wide$`Lower IC50 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Lower DSS3 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Lower DSS2 Box Cox Transformed and Scaled`, df_lmm_results_all_metrics_wide$`Lower DSS1 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Lower auc a boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Lower AUC boxcox sclaed2`),   # Lower CIs for each category
+  upper = list(df_lmm_results_all_metrics_wide$`Upper IC50 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Upper DSS3 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Upper DSS2 Box Cox Transformed and Scaled`, df_lmm_results_all_metrics_wide$`Upper DSS1 boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Upper auc a boxcox sclaed2`, df_lmm_results_all_metrics_wide$`Upper AUC boxcox sclaed2`),   # Upper CIs for each category
+  ci_column = 3,                                      # CI column placement
+  ref_line = 0,   
+  sizes = 1,
+  grid = F,
+  xlim = c(-2.0, 2.0),
+  #ticks_at = c(-2, -1, 0, 1, 2),
+  footnote = "\nᵃBonferroni corrected",
+  font.label = list(size = 18, family = "Arial"),
+  font.ticks = list(size = 18, family = "Arial"),
+  nudge_y = 0.15,
+  theme = tm
+)
+
+
+output_width_cm <- 19.4 #12
+output_height_cm <- 25 #10 19
+dpi <- 300  # Resolution in dots per inch
+
+# Convert cm to inches (1 inch = 2.54 cm)
+output_width_in <- output_width_cm / 2.54
+output_height_in <- output_height_cm / 2.54
+
+# Convert inches to pixels for the PNG device
+output_width_px <- output_width_in * dpi
+output_height_px <- output_height_in * dpi
+
+# Calculate scaling factors for the gtable
+scale_width <- output_width_cm / 10  # Base width adjustment (10 cm as reference)
+scale_height <- output_height_cm / 10  # Base height adjustment (10 cm as reference)
+
+p1_all_metric <- edit_plot(p1_all_metric, gp = gpar(cex=2, fontfamily="Arial")) #1.4
+p1_all_metric <- edit_plot(p1_all_metric, part = "header", gp = gpar(cex=2, fontfamily="Arial"))
+
+p1_all_metric <- edit_plot(p1_all_metric, col = 4:5, part = "header",
+                           which = "text",
+                           hjust = unit(0.5, "npc"),
+                           x = unit(0.5, "npc"))
+p1_all_metric <- edit_plot(p1_all_metric, col = 4:5, part = "body",
+                           which = "text",
+                           hjust = unit(0.5, "npc"),
+                           x = unit(0.5, "npc"))
+
+p1_all_metric <- edit_plot(p1_all_metric,
+                           col = 4,           # columns of header
+                           part = "header",     # part of the gtable to edit
+                           which = "text",      # what to edit in the grob
+                           label = "DSS₂", # New text with subscript 2 (U+2082)
+                           hjust = unit(0.5, "npc"),
+                           x = unit(0.5, "npc"), 
+                           gp = gpar(fontface = "bold"))
+p1_all_metric <- edit_plot(p1_all_metric,
+                           col = 5,           # columns of header
+                           part = "header",     # part of the gtable to edit
+                           which = "text",      # what to edit in the grob
+                           label = "IC₅₀", # New text with subscript 2 (U+2082)
+                           hjust = unit(0.5, "npc"),
+                           x = unit(0.5, "npc"), 
+                           gp = gpar(fontface = "bold"))
+p1_all_metric <- add_text(p1_all_metric, text = "p-valueᵃ",
+                          part = "header", 
+                          row = 0,
+                          col = 4:5,
+                          gp = gpar(cex=2.5, fontface = "bold", fontfamily = "Arial"))
+
+class(p1_all_metric$grobs[[5]])
+p1_all_metric$grobs[[5]]$gp <- gpar(col="black",cex=2,fontfamily="Arial",fontsize=12,lineheight=1.2,alpha=1,font=2)
+p1_all_metric$grobs[[1]]$gp
+# p1_all_metric <- insert_text(p1_all_metric, text = expression("DSS"[2]), part = "header", row = 1, col = 4, before = TRUE, gp = gpar(fontface = "bold"))
+legend_index <- 174
+p1_all_metric$layout$t[21]
+legend_index <- which(p1_all_metric$layout$name == "legend")
+p1_all_metric$layout$t[legend_index] <- 12 #nrow(p1_all_metric)       # or your desired row index
+p1_all_metric$layout$b[legend_index] <- 15 #nrow(p1_all_metric)
+p1_all_metric$layout$l[legend_index] <- 4             # column 4
+p1_all_metric$layout$r[legend_index] <- 4
+
+# Scale the gtable layout
+scaled_p1_all_metric <- gtable::gtable_filter(p1_all_metric, pattern = ".*", trim = TRUE)  # Keep all grobs
+scaled_p1_all_metric$widths <- scaled_p1_all_metric$widths * scale_width
+scaled_p1_all_metric$heights <- scaled_p1_all_metric$heights * scale_height
+scaled_p1_all_metric
+
+png(paste0(figure_output,'Forest_plot_all_metric.png'), height = 36, width = 56, unit = "cm", res = 300) #24.8 #height = 16, width = 46 ; height = 10, width = 28
+grid.newpage()
+grid.draw(scaled_p1_all_metric)
+dev.off()
+dev.off()
+
+
+#Plots for article----
+##Model visualization plot ----
+medium_data <- subset(all_response_metrics, !is.na(medium))
+#Renaming values for medium for vi
+medium_data <- medium_data %>% mutate(Medium = case_when(medium == "RPMI + fetal bovine serum (FBS) (10%)" ~ "RPMI + FBS", 
+                                           medium ==  "HS-5 conditioned medium" ~ "HS-5 CM",
+                                           medium ==  "Mononuclear cell medium" ~ "MCM",                                                                                                              
+                                           TRUE ~ medium))   
+#Simplified medium model for visualising random slope and intercept for drug
+model <- lmer(DSS2_boxcox_sclaed2 ~ Medium + (Medium|drug), medium_data)
+
+plot <- flexplot::visualize(model, plot = "model", sample = 3)#, center = "Median + quartiles") 
+
+plot$layers[[1]]$aes_params$alpha <- 0.5  #dot size
+plot$layers[[2]]$aes_params$alpha <- 0.5  #dot size
+plot$layers[[3]]$aes_params$linewidth <- 1 #linesize
+plot$layers[[3]]$aes_params$linetype <- 2  #line
+plot$layers[[3]]$aes_params$alpha <- 1
+plot$layers[[4]]$aes_params$size <- 1.5
+plot$layers[[5]]$aes_params$alpha <- 1 #average dot size
+plot$layers[[5]]$aes_params$linewidth <- 1 #average line size
+print(plot$layers)
+
+plot <- plot + 
+  scale_color_manual(values = c("#80b1d3", "#fb8072", "#bebada","#fccde5"), guide = guide_legend(title = "Drug")) +  
+  labs(
+    title = "Model Visualization",
+    x = "Experimental Variable", 
+    y = "Scaled DSS2", 
+    color = "Drug"
+  ) + coord_cartesian(ylim = c(-3, 3)) +   
+  guides(
+    linetype = "none", 
+    shape = "none"
+  ) + theme(
+    legend.position = "top",  # Position legend on the right
+    legend.title = element_text(family = "Arial", size = 10, color = "black"),  # Legend title Arial size 12
+    legend.text = element_text(family = "Arial", size = 10, color = "black"),   # Legend content Arial size 12
+    axis.text = element_text(family = "Arial", size = 10, color = "black"),     # Axis text Arial size 12
+    axis.title = element_text(family = "Arial", size = 10, color = "black"),    # Axis titles Arial size 12
+    axis.text.y = element_text(family = "Arial", size = 8, color = "black"),                    
+    axis.text.x = element_text(family = "Arial", size = 8, color = "black"),    
+    panel.grid = element_blank(),
+    plot.title = element_text(
+      size = 10,            # Font size
+      face = "plain",        # Bold text
+      hjust = 0.5,        
+      family = "Arial", 
+      vjust = 1
+    )
+  )
+
+ggsave(paste0(figure_output,'Model.png'), plot = plot, width=9, height=6.5, dpi = 300, unit = "cm")
+
+##Diagnostic plots----
+all_response_metrics$medium <- as.factor(all_response_metrics$medium)
+medium_model <- lmer(DSS2_boxcox_sclaed2 ~ medium + (1|Patient.num) + (medium|drug), subset(all_response_metrics, Patient.num != '2493_BA2563D_BA2563R'), REML = TRUE)
+pp_check_plot <- check_model(medium_model, check = "pp_check", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#80b1d3", "#fccde5", "black"))
+plot_pp_check <- plot(pp_check_plot)
+plot_pp_check_adjusted <- plot_pp_check$PP_CHECK + theme(text = element_text(family = "Arial", color= "black", size = 10),
+                                                         plot.title = element_text(hjust = 0.5, vjust = 1),
+                                                         axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                                                         axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                                                         axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                                                         axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                                                         plot.subtitle = element_blank(), 
+                                                         legend.position = "top",  
+                                                         legend.text = element_text(family = "Arial", color = "black", size = 10) 
+) + labs(x = expression("BoxCox Transformed and Scaled DSS"[2]))
+plot_pp_check_adjusted
+ggsave(paste0(figure_output,"pp_check.png"), plot = plot_pp_check_adjusted,width = 9, height = 6.5, units="cm") #width = 9, height = 6.5
+
+linearity_plot <- check_model(medium_model, check = "linearity", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3"))
+plot_linearity <- plot(linearity_plot)
+plot_linearity_adjusted <- plot_linearity$NCV + theme(text = element_text(family = "Arial", color= "black", size = 10),
+                                                      plot.title = element_text(hjust = 0.5, vjust = 1),
+                                                      axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                                                      axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                                                      axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                                                      axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                                                      plot.subtitle = element_blank(), 
+                                                      legend.position = "right",  
+                                                      legend.text = element_text(family = "Arial", color = "black", size = 10) 
+)
+plot_linearity_adjusted
+ggsave(paste0(figure_output,"linearity.png"), plot = plot_linearity_adjusted, width = 9, height = 6.5, units="cm")
+
+homogeneity_plot <- check_model(medium_model, check = "homogeneity", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3"))
+plot_homogeneity <- plot(homogeneity_plot)
+plot_homogeneity_adjusted <- plot_homogeneity$HOMOGENEITY + labs(y = expression(sqrt("|Std. Residuals|"))) + theme(text = element_text(family = "Arial", color= "black", size = 10),
+                                                                                                                   plot.title = element_text(hjust = 0.5, vjust = 1),
+                                                                                                                   axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                                                                                                                   axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                                                                                                                   axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                                                                                                                   axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                                                                                                                   plot.subtitle = element_blank(), 
+                                                                                                                   show.legend = TRUE,
+                                                                                                                   legend.key = element_rect(fill = "white"),
+                                                                                                                   legend.position = "top",  
+                                                                                                                   legend.text = element_text(family = "Arial", color = "black", size = 10) 
+)
+ggsave(paste0(figure_output,"homogeneity_check.png"), plot = plot_homogeneity_adjusted, width = 9, height = 6.5, units="cm")
+
+influential_plot <- check_model(medium_model, check = "outliers", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3", "black"))
+plot_influential <- plot(influential_plot)  
+plot_influential_adjusted <- plot_influential$OUTLIERS + theme(text = element_text(family = "Arial", color= "black", size = 10),
+                                                               plot.title = element_text(hjust = 0.5, vjust = 1),
+                                                               axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                                                               axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                                                               axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                                                               axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                                                               plot.subtitle = element_blank(), 
+                                                               legend.position = "right",  
+                                                               legend.text = element_text(family = "Arial", color = "black", size = 10) 
+)
+plot_influential_adjusted
+outlier_list <- check_outliers(medium_model)
+outliers_info <- as.data.frame(outlier_list)
+ggsave(paste0(figure_output,"influential_check.png"), plot = plot_influential_adjusted, width = 9, height = 6.5, units="cm")
+
+normality_plot <- check_model(medium_model, check = "qq", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3"))
+plot_normality <- plot(normality_plot)
+plot_normality_adjusted <- plot_normality$QQ + theme(text = element_text(family = "Arial", color= "black", size = 10),
+                                                     plot.title = element_text(hjust = 0.5, vjust = 1),
+                                                     axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                                                     axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                                                     axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                                                     axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                                                     plot.subtitle = element_blank(), 
+                                                     legend.position = "right",  
+                                                     legend.text = element_text(family = "Arial", color = "black", size = 10) 
+)
+plot_normality_adjusted
+ggsave(paste0(figure_output,"normality_check.png"), plot = plot_normality_adjusted, width = 7.94, height = 7.49, units="cm")
+
+Medium_model1 <- lmer(DSS2_boxcox_sclaed2 ~ Medium + (1|Patient.num) + (Medium|drug),medium_data)
+random_effects_plot <- check_model(medium_model, check = "reqq", panel = F, title_size = 10, axis_title_size = 10, base_size = 8, colors = c("#fccde5", "#80b1d3"))
+random_effects_plot$REQQ$drug$facet <- factor(random_effects_plot$REQQ$drug$facet, 
+                                              levels = c("(Intercept)", "mediumMononuclear cell medium", "mediumRPMI + fetal bovine serum (FBS) (10%)"), 
+                                              labels = c("Intercept", "MCM", "RPMI + FBS"))
+
+plot_random_effects <- plot(random_effects_plot)
+plot_random_effects[[2]]
+plot_random_effects_adjusted_1 <- plot_random_effects[[1]] + theme(text = element_text(family = "Arial", color= "black", size = 10),
+                                                                   plot.title = element_text(hjust = 0.5, vjust = 1),
+                                                                   axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                                                                   axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                                                                   axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                                                                   axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                                                                   plot.subtitle = element_blank(), 
+                                                                   legend.position = "right",  
+                                                                   legend.text = element_text(family = "Arial", color = "black", size = 10), 
+                                                                   panel.grid.major = element_blank(), 
+                                                                   panel.grid.minor = element_blank(),  
+                                                                   panel.background = element_blank()  
+) + labs(title = "Normality of Random Effects - Patient") 
+plot_random_effects_adjusted_1
+ggsave(paste0(figure_output,"random_effects_check_1.png"), plot = plot_random_effects_adjusted_1, width = 9, height = 6.5, units="cm")
+
+plot_random_effects_adjusted_2 <- plot_random_effects[[2]] + theme(text = element_text(family = "Arial", color= "black", size = 10),
+                                                                   plot.title = element_text(hjust = 0.5, vjust = 1,color= "black"),
+                                                                   axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                                                                   axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                                                                   axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                                                                   axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                                                                   plot.subtitle = element_blank(), 
+                                                                   legend.position = "right",  
+                                                                   legend.text = element_text(family = "Arial", color = "black", size = 10),
+                                                                   panel.grid.major = element_blank(), 
+                                                                   panel.grid.minor = element_blank(),  
+                                                                   panel.background = element_blank(),
+                                                                   strip.text = element_text(family = "Arial", color = "black", size = 8, face = "plain"),  
+                                                                   strip.background = element_blank()
+) + labs(title = "Normality of Random Effects - Drug")
+plot_random_effects_adjusted_2
+ggsave(paste0(figure_output,"random_effects_check_2.png"), plot = plot_random_effects_adjusted_2, width = 9, height = 6.5, units="cm")
+
+comboplot1 <- (
+  (plot | plot_homogeneity_adjusted)
+) +
+  plot_layout(heights = c(1, 1, 1, 2))
+
+comboplot2 <- (
+  (plot_pp_check_adjusted | plot_influential_adjusted) 
+) +
+  plot_layout(heights = c(1, 1, 1, 2))
+
+comboplot3 <- (
+  (plot_random_effects_adjusted_1 | plot_random_effects_adjusted_2) 
+) +
+  plot_layout(heights = c(1, 1, 1, 2))
+
+ggsave(paste0(figure_output,"combo_plots.png"), plot = comboplot1, width = 20.76, height = 7.09, units="cm")
+ggsave(paste0(figure_output,"combo_plots2.png"), plot = comboplot2, width = 20.76, height = 7.09, units="cm")
+ggsave(paste0(figure_output,"combo_plots3.png"), plot = comboplot3, width = 20.76, height = 7.09, units="cm")
+
+##Regression plots----
+###Fresh vs Frozen plots----
+####Karolinska----
+all_response_metrics$sample
+result <- subset(all_response_metrics, lab == 'Karolinska') %>%
+  group_by(Patient_ID) %>%
+  summarise(unique_x_count = n_distinct(sample)) %>%
+  filter(unique_x_count == 2)
+
+# Count how many unique ids meet the criteria
+count_result <- nrow(result)
+
+# Print the result
+print(result)       # Shows the ids with exactly two unique instances of x
+print(count_result) # Shows the count of such ids
+print(unique(all_response_metrics$sample))
+
+df1_filtered <- all_response_metrics[all_response_metrics$Patient_ID %in% result$Patient_ID, ]
+
+new_df <- df1_filtered %>%
+  group_by(Patient_ID, drug) %>%
+  reframe(
+    Fresh = DSS2[sample == 'fresh'],
+    Frozen = DSS2[sample == 'frozen']
+  )
+
+# View the new data frame
+print(new_df)
+
+# Calculate adjusted R^2
+adjusted_r2 <- summary(lm_model)$adj.r.squared
+
+# Extract the p-value for Fresh
+pval <- summary(lm_model)$coefficients[2, 4] 
+
+# Apply FDR adjustment (assuming multiple tests, example 10)
+pval_fdr <- p.adjust(pval, method = "fdr")
+
+pearson_cor_test <- cor.test(new_df$Fresh, new_df$Frozen, method = "pearson")
+pearson_cor <- pearson_cor_test$estimate
+p_value <- pearson_cor_test$p.value
+
+# Prepare the annotation text
+annotation_text <- paste0(
+  "R = ", round(pearson_cor, 3), 
+  "\np ", ifelse(format(p_value, scientific = TRUE, digits = 3)<0.001,paste("=",format(p_value, scientific = TRUE, digits = 3)), "<0.001")
+)
+
+custom_colors <- c(
+  "#8dd3c7", "#ffffb3", "#bebada", "#fb8072", 
+  "#80b1d3", "#fdb462", "#b3de69", "#fccde5", 
+  "#bc80bd", "#ccebc5"  # Added two complementary colors
+)
+display.brewer.pal(n = 10, name = "Set3")
+# Create the plot
+scatterplot_fresh_vs_frozen_karolinska <- ggplot(new_df, aes(x = Fresh, y = Frozen)) +
+  geom_point(aes(color = factor(Patient_ID)), size = 3) +
+  ylim(0, 45) + 
+  xlim(0,45) +
+  coord_fixed(ratio = 1)+
+  geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
+  scale_color_manual(values = custom_colors) +
+  annotate(
+    "text", 
+    x = 0, y = 45, 
+    label = annotation_text, 
+    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+  ) +
+  labs(color = "Patient ID", x= expression("Fresh DSS"[2]), y = expression("Frozen DSS"[2])) +
+  theme_classic() + 
+  theme(
+    text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
+    axis.text = element_text(size = 8, family = "Arial"), # Tick labels Arial, size 8
+    legend.text = element_text(size = 10, family = "Arial"), # Legend text Arial, size 10
+    legend.title = element_text(size = 10, family = "Arial"), # Legend title Arial, size 10
+    legend.background = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_blank(), # Optional: Remove background panel
+    plot.background = element_blank()   # Optional: Remove plot background
+  )
+
+ggsave(paste0(figure_output,"Karolinska_fresh_vs_frozen.png"), plot = scatterplot_fresh_vs_frozen_karolinska, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+
+####Oslo----
+###Diagnosis vs Relapse----
+###Blood vs Bone marrow----
+tissue_same_sample <- all_response_metrics %>%
+  group_by(Patient_ID) %>%
+  summarise(unique_x_count = n_distinct(Tissue)) %>%
+  filter(unique_x_count >= 2)
+
+tissue_filtered <- all_response_metrics[all_response_metrics$Patient_ID %in% tissue_same_sample$Patient_ID, ]
+
+tissue_filtered <- tissue_filtered %>% mutate(Patient_ID == ifelse(
+  Patient_ID != "2085" &
+  Patient_ID != "2219" &
+  Patient_ID != "2292", Patient_ID, Patient.num)) 
+unique(subset(tissue_filtered, Patient_ID == '2085', select = c('Patient.num', 'Patient_ID')))
+
+tissue_df <- subset(tissue_filtered, Patient_ID != "2085" & Patient_ID != "2219" & Patient_ID != "2292") %>%
+  group_by(Patient_ID, drug) %>%
+  reframe(
+    Blood = DSS2[Tissue == 'Blood'],
+    `Bone Marrow` = DSS2[Tissue == 'Bone marrow']
+  )
+
+# View the new data frame
+print(tissue_df)
+
+
+pearson_cor_test <- cor.test(tissue_df$Blood, tissue_df$`Bone Marrow`, method = "pearson")
+pearson_cor <- pearson_cor_test$estimate
+p_value <- pearson_cor_test$p.value
+
+# Prepare the annotation text
+annotation_text <- paste0(
+  "R = ", round(pearson_cor, 3), 
+  "\np ", ifelse(format(p_value, scientific = TRUE, digits = 3)<0.001,paste("=",format(p_value, scientific = TRUE, digits = 3)), "<0.001")
+)
+
+custom_colors <- c(
+  "#8dd3c7", "#ffffb3", "#bebada", "#fb8072", 
+  "#80b1d3", "#fdb462", "#b3de69", "#fccde5", 
+  "#bc80bd", "#ccebc5"  # Added two complementary colors
+)
+display.brewer.pal(n = 10, name = "Set3")
+# Create the plot
+scatterplot_blood_bone_marrow <- ggplot(tissue_df, aes(x = Blood, y = `Bone Marrow`)) +
+  geom_point(aes(color = factor(Patient_ID)), size = 3) +
+  ylim(0, 45) + 
+  xlim(0,45) +
+  coord_fixed(ratio = 1)+
+  geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
+  #scale_color_manual(values = custom_colors) +
+  annotate(
+    "text", 
+    x = 0, y = 45, 
+    label = annotation_text, 
+    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+  ) +
+  labs(color = "Patient ID", x= expression("Blood DSS"[2]), y = expression("Bone Marrow DSS"[2])) +
+  theme_classic() + 
+  theme(
+    text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
+    axis.text = element_text(size = 8, family = "Arial"), # Tick labels Arial, size 8
+    legend.text = element_text(size = 10, family = "Arial"), # Legend text Arial, size 10
+    legend.title = element_text(size = 10, family = "Arial"), # Legend title Arial, size 10
+    legend.background = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_blank(), # Optional: Remove background panel
+    plot.background = element_blank()   # Optional: Remove plot background
+  )
+
+ggsave(paste0(figure_output,"Bloor_Bone_Marrow.png"), plot = scatterplot_blood_bone_marrow, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+
+
+
+##Model assessment biospecimen----
+all_response_metrics$Disease.status <- gsub('remission', 'Remission', all_response_metrics$Disease.status)
+all_response_metrics$sample <- gsub('Cryopreserved', NA, all_response_metrics$sample) #Frozen
+all_response_metrics$Tissue <- gsub('Leukapheresis', NA, all_response_metrics$Tissue) #Blood
+
+frozen_count <- all_response_metrics %>% group_by(sample, drug) %>% dplyr::summarize(count = n())
+tissue_count <- all_response_metrics %>% group_by(Tissue, drug) %>% dplyr::summarize(count = n())
+disease_count <- all_response_metrics %>% group_by(Disease.status, drug) %>% dplyr::summarize(count = n())
+
+
+mixed_model_sample_DSS2 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (0 + lab|drug), subset(all_response_metrics))
+summary(mixed_model_sample_DSS2)
+check_model(mixed_model_sample_DSS2)
+icc(mixed_model_sample_DSS2)
+
+mixed_model_sample_DSS2_1 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (lab|drug), subset(all_response_metrics))
+summary(mixed_model_sample_DSS2_1)
+check_model(mixed_model_sample_DSS2_1)
+mixed_model_sample_DSS2_2 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (1|drug) + (1|lab), subset(all_response_metrics))
+summary(mixed_model_sample_DSS2_2)
+check_model(mixed_model_sample_DSS2_2)
+mixed_model_sample_DSS2_3 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (1|drug) + (1|sample) + (1|Tissue) + (1|Disease.status), subset(all_response_metrics))
+check_model(mixed_model_sample_DSS2_3)
+#mixed_model_sample_DSS2_3 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (1|drug) + (1|sample) + (1|Tissue) + (1|Disease.status) + (1|lab), subset(all_response_metrics))
+mixed_model_sample_DSS2_4 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|drug) + (1|sample) + (1|Tissue) + (1|Disease.status) + (1|lab), subset(all_response_metrics))
+mixed_model_sample_DSS2_5 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (sample|drug) + (Tissue|drug) + (Disease.status|drug) + (1|lab), subset(all_response_metrics))
+mixed_model_sample_DSS2_6 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (sample|drug) + (Tissue|drug) + (Disease.status|drug), subset(all_response_metrics))
+
+anova(mixed_model_sample_DSS2, mixed_model_sample_DSS2_1, mixed_model_sample_DSS2_2, mixed_model_sample_DSS2_3, mixed_model_sample_DSS2_4, mixed_model_sample_DSS2_5, mixed_model_sample_DSS2_6, test = "LRT")
+
+dss2_models_sample <-c(mixed_model_sample_DSS2_1)
+
+##Forestplot biospecimen----
+df_dss2_models_sample <- model_results(dss2_models_sample)
+df_dss2_models_sample$Random_Effect_Term <- '(1|Patient.num) + (0 + Lab | Drug)'
+colnames(df_dss2_models_sample) <- gsub("_", " ", colnames(df_dss2_models_sample))     
+colnames(df_dss2_models_sample) <- sapply(colnames(df_dss2_models_sample), tools::toTitleCase)
+rownames(df_dss2_models_sample) <- NULL
+
+df_dss2_models_sample <- df_dss2_models_sample %>% mutate(`Biospecimen Type`= case_when(`Fixed Effect Term` == "TissueBone marrow" ~ "Tissue: Bone Marrow", 
+                                                                                        `Fixed Effect Term` ==  "Disease.statusRefractory" ~ "Disease Status: Refractory",
+                                                                                        `Fixed Effect Term` ==  "samplefrozen" ~ "Sample: Frozen",
+                                                                                        `Fixed Effect Term` ==  "Disease.statusRelapse" ~ "Disease Status: Relapse",
+                                                                                        `Fixed Effect Term` ==  "Disease.statusRemission" ~ "Disease Status: Remission",
+                                                                                        TRUE ~ `Fixed Effect Term`))
+
+
+df_dss2_models_sample <- df_dss2_models_sample %>% mutate(`Reference Group` = case_when(`Fixed Effect Term` == "samplefrozen" ~ "Sample: Fresh", 
+                                                                                        str_detect(`Fixed Effect Term`, "Disease.status") ~ "Disease Starus: Diagnosis",
+                                                                                        `Fixed Effect Term` == "TissueBone marrow" ~ "Tissue: Blood", 
+                                                                                        TRUE ~ `Fixed Effect Term`))
+
+#df_dss2_models_sample <- df_dss2_models_sample[,order(df_dss2_models_sample$`Fixed Effect Coefficient`)]
+
+tm <- forest_theme(base_sixe = 12,
+                   arrow_type = "closed",
+                   footnote_gp = gpar(col = "black", cex = 0.6), 
+                   align = "center", 
+                   footnote_parse = FALSE, 
+                   line_size = 1.5, 
+                   xaxis_gp = gpar(fontsize = 10, fontfamily = "Arial"), 
+                   spacing = 2,)
+df_dss2_models_sample$` ` <- paste(rep(" ", 20), collapse = " ")
+df_dss2_models_sample$`p-value` <- round(df_dss2_models_sample$`p Value`, 4)
+df_dss2_models_sample <- df_dss2_models_sample %>% mutate(`n` = case_when(`Biospecimen Type` == 'Sample: Frozen' ~ '55-98',
+                                                                          `Biospecimen Type` == 'Disease Status: Remission' ~ '2-21',
+                                                                          `Biospecimen Type` == 'Disease Status: Relapse' ~ '50-97',
+                                                                          `Biospecimen Type` == 'Tissue: Bone Marrow' ~ '270-600',
+                                                                          `Biospecimen Type` == 'Disease Status: Refractory' ~ '10-145'
+))
+
+p_sample <- forest(df_dss2_models_sample[,c('Biospecimen Type', 'Reference Group', ' ', 'p-value', 'n')],
+                   est = df_dss2_models_sample$`Fixed Effect Coefficient`,
+                   lower = df_dss2_models_sample$Lower, 
+                   upper = df_dss2_models_sample$Upper,
+                   sizes = 1.0,
+                   ci_column = 3,
+                   ref_line = 0,
+                   #arrow_lab = c("Lower DSS2 than reference group", "Higher DSS2 than refernce group"),
+                   xlim = c(-1, 1),
+                   #ticks_at = c(-1, -0.5, 0, 0.5, 1),
+                   #footnote = "*1:LymphoPrepTM gradient centrifugation \n*2: Supernatant isolation at 300g 10min, density centrifugation at 400g for 20min without brake, afterwards always 300g 5 min",
+                   theme = tm, 
+                   xlab = expression('Change in Scaled DSS'[2]),
+                   font.label = list(size = 10, family = "Arial"),
+                   font.ticks = list(size = 9),)
+
+# Print plot
+plot(p_sample)
+p_wh <- get_wh(p_sample)
+pdf('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/Forest_plot_DSS2_biospecimens.pdf',width = p_wh[1], height = 6)
+plot(p_sample)
+dev.off()
+
+output_width_cm <- 12 #12 output_width_cm <- 20 #17
+output_height_cm <- 10 #10 output_height_cm <- 16 #13
+
+dpi <- 300  # Resolution in dots per inch
+
+# Convert cm to inches (1 inch = 2.54 cm)
+output_width_in <- output_width_cm / 2.54
+output_height_in <- output_height_cm / 2.54
+
+# Convert inches to pixels for the PNG device
+output_width_px <- output_width_in * dpi
+output_height_px <- output_height_in * dpi
+
+# Calculate scaling factors for the gtable
+scale_width <- output_width_cm / 10  # Base width adjustment (10 cm as reference)
+scale_height <- output_height_cm / 10  # Base height adjustment (10 cm as reference)
+
+p_sample <- edit_plot(p_sample, gp = gpar(cex=0.9, fontfamily="Arial")) #1.4
+p_sample <- edit_plot(p_sample, part = "header", gp = gpar(cex=0.9, fontfamily="Arial"))
+
+p_sample <- edit_plot(p_sample, col = 4:5, part = "header",
+                      which = "text",
+                      hjust = unit(0.5, "npc"),
+                      x = unit(0.5, "npc"))
+p_sample <- edit_plot(p_sample, col = 4:5, part = "body",
+                      which = "text",
+                      hjust = unit(0.5, "npc"),
+                      x = unit(0.5, "npc"))
+
+# Scale the gtable layout
+scaled_p_sample_all_metric <- gtable::gtable_filter(p_sample, pattern = ".*", trim = TRUE)  # Keep all grobs
+scaled_p_sample_all_metric$widths <- scaled_p_sample_all_metric$widths * scale_width
+scaled_p_sample_all_metric$heights <- scaled_p_sample_all_metric$heights * scale_height
+
+
+png(paste0(figure_output,'Forest_plot_blood.png'), height = 16, width = 26, unit = "cm", res = 300) #24.8 height = 26, width = 56 height = 10, width = 30
+#10 28
+grid.newpage()
+grid.draw(scaled_p_sample_all_metric)
+dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################################################################################################################
+#----
+#----
+
 
 #Import datasets ----
 #Karolinska
@@ -1113,272 +2306,272 @@ for(j in unique(all_response_metrics$drug)){
 }
 
 
-library(ggstatsplot)
-custom_colors <- c("Beat AML" = "#8dd3c7",  "Oslo" = "#fdb462", "Helsinki" = "#fb8072", "Karolinska"= "#80b1d3")
-all_datasets_v2$lab <- factor(all_datasets_v2$lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
-selected_groups <- unique(all_datasets_v2$drug)[2:5] # Select first 6 groups
-filtered_data <- all_datasets_v2[all_datasets_v2$drug %in% selected_groups, ]
-filtered_data$drug <- tools::toTitleCase(filtered_data$drug)
-
-g <- grouped_ggbetweenstats( # paired samples
-  data = all_response_metrics,
-  x = lab,
-  y = DSS2,
-  grouping.var = drug,
-  type = "nonparametric", # for wilcoxon
-  centrality.plotting = FALSE, # remove median
-  ggstatsplot.layer = TRUE,
-  xlab = "",        
-  ylab = expression("DSS"[2]),
-  results.subtitle = TRUE,  # Removes default subtitle
-  #subtitle = "{test} (p = {p})", 
-  p.adjust.method = "bonferroni",
-  pairwise.display = "significant", #"significant"
-  #pairwise.comparisons = TRUE,
-  plotgrid.args = list(ncol = 12),
-  facet_wrap.args = list(scales = "fixed", strip.position = "top"),
-  #plot.margin = margin(0, 10, 10, 10),
-  #point.args = list(alpha = 0.9),
-  violin.args = list(alpha = 0),
-  boxplot.args = list(alpha = 0),
-  ggsignif.args = list(textsize = 3, tip_length = 0.005, step_increase = 0.05),
-  p.value.label.args = list(
-    parse = TRUE
-  ),
-  ggplot.component = list(
-    coord_cartesian(ylim = c(0, 50)),
-    #scale_y_continuous(labels = c(0:5, "")),
-    scale_y_continuous(expand = expansion(mult = c(0.05, 0.55))),
-    scale_color_manual(values = custom_colors), 
-    #ggplot2::scale_y_continuous(limits = c(0, 50), sec.axis = ggplot2::dup_axis(name = NULL)), 
-    ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(alpha = 1))), 
-    theme(
-          panel.background = element_blank(), 
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          plot.subtitle = element_text(hjust = 0.5, margin = margin(b = 0)),
-          axis.text.y.right = ggplot2::element_blank(), 
-          axis.ticks.y.right = ggplot2::element_blank(),
-          axis.ticks.x = ggplot2::element_blank(),
-          axis.text.x = element_text(family = "Arial", face = "plain",size = 13, color = "black", angle = 25, hjust = 0.6),
-          axis.title.y = element_text(family = "Arial", face = "plain", size = 13, color = "black"),
-          plot.title = element_text(family = "Arial", face = "plain", size = 13, color = "black", hjust = 0.5, margin = margin(b = 0))))
-  ) 
-annot <- g[[1]]$layers[[4]]$stat_params$annotations
-annot <- gsub("list\\(italic\\(p\\)\\[\\\"FDR\\\"\\s*-\\s*adj\\.\\] == \"", "list(FDR == ", annot)
-annot <- gsub("\"\\)", ")", annot)
-
-for (i in 1:46) {
-  print(g[[i]])
-  print(g[[1]]$layers[[4]]$stat_params$annotations)
-  
-  # Check if the current g[[i]] contains annotations
-  if (!is.null(g[[i]]$layers[[4]]$stat_params$annotations)) {
-    
-    # Extract the annotations for this g[[i]]
-    annotations <- g[[i]]$layers[[4]]$stat_params$annotations
-    
-    # Modify the annotations by removing unwanted parts
-    annotations_modified <- unlist(lapply(annotations, function(annot) {
-      # Remove LaTeX parts (italic(p) and adj.)
-      annot <- gsub("list\\(italic\\(p\\)\\[\\\"FDR\\\"\\s*-\\s*adj\\.\\] == \"", "list(FDR == ", annot)
-      annot <- gsub("\"\\)", ")", annot)  # Remove the trailing ')'
-      annot <- sapply(annot, function(x) {
-        # Extract the numeric value
-        num <- as.numeric(gsub(".*==\\s*([0-9.eE+-]+).*", "\\1", x))
-        
-        # Check and replace
-        if (num < 0.001) {
-          gsub("==.*", "< 0.001)", x)
-        } else {
-          x
-        }
-      })
-      return(annot)
-    }))
-    
-    # Update the annotations in g[[i]]
-    g[[i]]$layers[[4]]$stat_params$annotations <- annotations_modified
-  }
-  if(!is.null(g[[i]]$labels$subtitle)){
-    subtitle <- g[[i]]$labels$subtitle
-    print(subtitle)
-    subtitle_str <- deparse(subtitle)  
-    subtitle_str <- paste(subtitle_str, collapse = " ")  # Ensure it's a single string
-    
-    # Extract only "Kruskal-Wallis: italic(p) == value"
-    subtitle_mod <- str_replace(subtitle_str, 'list\\(chi\\["Kruskal-Wallis"\\]\\^2.*?italic\\(p\\) ==      "', "Kruskal-Wallis: p = ")
-    subtitle_mod <- str_replace(subtitle_mod, '", widehat\\(epsilon\\)\\["ordinal"\\]\\^2.*', "")
-    
-    print(subtitle_mod)
-    g[[i]]$labels$subtitle <- subtitle_mod
-  }
-}
-
-gb <- ggplot_build(g)
-gb$data
-# Now print or display the modified plot
-pdf("Desktop/UiO/Project 1/Figures/draw/Difference_DSS2_per_drug_v1.pdf", width = 80, height = 30)
-ggplot_build(g)
-dev.off()
-
-ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/Difference_DSS2_per_drug_v1.png", plot = g, width = 80, height = 30, units = "cm", limitsize = FALSE)
-ggsave("Desktop/UiO/Project 1/Figures/draw/Difference_DSS2_per_drug_sample.png", plot = g, width = 8, height = 8, dpi = 300, limitsize = FALSE)
-
-g <- grouped_ggbetweenstats( # paired samples
-  data = subset(filtered_data, drug != "001, RAD"),
-  x = lab,
-  y = DSS2,
-  grouping.var = drug,
-  type = "nonparametric", # for wilcoxon
-  centrality.plotting = FALSE, # remove median
-  xlab = "",        
-  ylab = "DSS2",
-  results.subtitle = TRUE,  # Removes default subtitle
-  #subtitle = "{test} (p = {p})", 
-  p.adjust.method = "fdr",
-  pairwise.display = "none", #"significant"
-  #pairwise.comparisons = TRUE,
-  plotgrid.args = list(nrow = 2, ncol = 2),
-  facet_wrap.args = list(scales = "fixed", strip.position = "top"),
-  plot.margin = margin(0, 10, 10, 10),
-  #point.args = list(alpha = 0.9),
-  violin.args = list(alpha = 0),
-  boxplot.args = list(alpha = 0),
-  #ggsignif.args = list(textsize = 3, tip_length = 0.005, step_increase = 0.05),
-  ggplot.component = list(
-    coord_cartesian(ylim = c(0, 50)),
-    #scale_y_continuous(labels = c(0:5, "")),
-    #scale_y_continuous(expand = expansion(mult = c(0.05, 0.55))),
-    scale_color_manual(values = custom_colors), 
-    #ggplot2::scale_y_continuous(limits = c(0, 50), sec.axis = ggplot2::dup_axis(name = NULL)), 
-    ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(alpha = 1))), 
-    theme(
-      panel.background = element_blank(), 
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      plot.subtitle = element_text(hjust = 0.5, margin = margin(b = 0)),
-      axis.text.y.right = ggplot2::element_blank(), 
-      axis.ticks.y.right = ggplot2::element_blank(),
-      axis.ticks.x = ggplot2::element_blank(),
-      axis.text.x = element_text(family = "Arial", face = "plain",size = 12, color = "black", angle = 25, hjust = 0.6), #0.6
-      axis.title.y = element_text(family = "Arial", face = "plain", size = 12, color = "black"),
-      plot.title = element_text(family = "Arial", face = "plain", size = 12, color = "black", hjust = 0.5, margin = margin(b = 0))))
-) 
-
-for (i in 1:4) {
-  if(!is.null(g[[i]]$labels$subtitle)){
-    subtitle <- g[[i]]$labels$subtitle
-    print(subtitle)
-    subtitle_str <- deparse(subtitle)  
-    subtitle_str <- paste(subtitle_str, collapse = " ")  # Ensure it's a single string
-    
-    # Extract only "Kruskal-Wallis: italic(p) == value"
-    subtitle_mod <- str_replace(subtitle_str, 'list\\(chi\\["Kruskal-Wallis"\\]\\^2.*?italic\\(p\\) ==      "', "p = ")
-    subtitle_mod <- str_replace(subtitle_mod, '", widehat\\(epsilon\\)\\["ordinal"\\]\\^2.*', "")
-    
-    print(subtitle_mod)
-    g[[i]]$labels$subtitle <- subtitle_mod
-  }
-}
-print(g)
-
-
-g <- grouped_ggbetweenstats( # paired samples
-  data = all_response_metrics,
-  x = lab,
-  y = DSS2_boxcox_sclaed2,
-  grouping.var = drug,
-  type = "nonparametric", # for wilcoxon
-  centrality.plotting = FALSE, # remove median
-  ggstatsplot.layer = TRUE,
-  xlab = "",        
-  ylab = "Box-Cox transformed Z-scaled DSS2",
-  results.subtitle = TRUE,  # Removes default subtitle
-  #subtitle = "{test} (p = {p})", 
-  p.adjust.method = "fdr",
-  pairwise.display = "significant", #"significant"
-  #pairwise.comparisons = TRUE,
-  #plotgrid.args = list(nrow = 2, ncol = 2),
-  facet_wrap.args = list(scales = "fixed", strip.position = "top"),
-  #plot.margin = margin(0, 10, 10, 10),
-  #point.args = list(alpha = 0.9),
-  violin.args = list(alpha = 0),
-  boxplot.args = list(alpha = 0),
-  ggsignif.args = list(textsize = 3, tip_length = 0.005, step_increase = 0.05),
-  ggplot.component = list(
-    coord_cartesian(ylim = c(-4, 4)),
-    #scale_y_continuous(labels = c(0:5, "")),
-    scale_y_continuous(expand = expansion(mult = c(0.05, 0.55))),
-    scale_color_manual(values = custom_colors), 
-    #ggplot2::scale_y_continuous(limits = c(0, 50), sec.axis = ggplot2::dup_axis(name = NULL)), 
-    ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(alpha = 1))), 
-    theme(
-      panel.background = element_blank(), 
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      plot.subtitle = element_text(hjust = 0.5, margin = margin(b = 0)),
-      axis.text.y.right = ggplot2::element_blank(), 
-      axis.ticks.y.right = ggplot2::element_blank(),
-      axis.ticks.x = ggplot2::element_blank(),
-      axis.text.x = element_text(family = "Arial", face = "plain",size = 13, color = "black", angle = 25, hjust = 0.6),
-      axis.title.y = element_text(family = "Arial", face = "plain", size = 13, color = "black"),
-      plot.title = element_text(family = "Arial", face = "plain", size = 13, color = "black", hjust = 0.5, margin = margin(b = 0))))
-) 
-
-for (i in 1:46) {
-  print(g[[i]])
-  print(g[[1]]$layers[[4]]$stat_params$annotations)
-  
-  # Check if the current g[[i]] contains annotations
-  if (!is.null(g[[i]]$layers[[4]]$stat_params$annotations)) {
-    
-    # Extract the annotations for this g[[i]]
-    annotations <- g[[i]]$layers[[4]]$stat_params$annotations
-    
-    # Modify the annotations by removing unwanted parts
-    annotations_modified <- unlist(lapply(annotations, function(annot) {
-      # Remove LaTeX parts (italic(p) and adj.)
-      annot <- gsub("list\\(italic\\(p\\)\\[\\\"FDR\\\"\\s*-\\s*adj\\.\\] == \"", "list(FDR == ", annot)
-      annot <- gsub("\"\\)", ")", annot)  # Remove the trailing ')'
-      return(annot)
-    }))
-    
-    # Update the annotations in g[[i]]
-    g[[i]]$layers[[4]]$stat_params$annotations <- annotations_modified
-  }
-  if(!is.null(g[[i]]$labels$subtitle)){
-    subtitle <- g[[i]]$labels$subtitle
-    print(subtitle)
-    subtitle_str <- deparse(subtitle)  
-    subtitle_str <- paste(subtitle_str, collapse = " ")  # Ensure it's a single string
-    
-    # Extract only "Kruskal-Wallis: italic(p) == value"
-    subtitle_mod <- str_replace(subtitle_str, 'list\\(chi\\["Kruskal-Wallis"\\]\\^2.*?italic\\(p\\) ==      "', "Kruskal-Wallis: p-value = ")
-    subtitle_mod <- str_replace(subtitle_mod, '", widehat\\(epsilon\\)\\["ordinal"\\]\\^2.*', "")
-    
-    print(subtitle_mod)
-    g[[i]]$labels$subtitle <- subtitle_mod
-  }
-}
-
-# Now print or display the modified plot
-print(g)
-g[[1]]$labels$subtitle
-ggsave("Desktop/UiO/Project 1/Figures/draw/Difference_box_cox_sclaed_DSS2_per_drug.png", plot = g, width = 50, height = 90, units = "cm", limitsize = FALSE)
-
-  
-s <- grouped_ggbetweenstats( # paired samples
-  data = all_datasets_v2,
-  x = lab,
-  y = DSS2_boxcox_sclaed2,
-  grouping.var = drug,
-  type = "nonparametric", # for wilcoxon
-  centrality.plotting = FALSE # remove median
-)
-extract_stats(g)
-
-ggsave("Desktop/UiO/Project 1/Figures/V3/Difference_DSS2_per_drug_box_cox_scaled.pdf", plot = s, width = 150, height = 250, units = "cm", limitsize = FALSE)
+# library(ggstatsplot)
+# custom_colors <- c("Beat AML" = "#8dd3c7",  "Oslo" = "#fdb462", "Helsinki" = "#fb8072", "Karolinska"= "#80b1d3")
+# all_datasets_v2$lab <- factor(all_datasets_v2$lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
+# selected_groups <- unique(all_datasets_v2$drug)[2:5] # Select first 6 groups
+# filtered_data <- all_datasets_v2[all_datasets_v2$drug %in% selected_groups, ]
+# filtered_data$drug <- tools::toTitleCase(filtered_data$drug)
+# 
+# g <- grouped_ggbetweenstats( # paired samples
+#   data = all_response_metrics,
+#   x = lab,
+#   y = DSS2,
+#   grouping.var = drug,
+#   type = "nonparametric", # for wilcoxon
+#   centrality.plotting = FALSE, # remove median
+#   ggstatsplot.layer = TRUE,
+#   xlab = "",        
+#   ylab = expression("DSS"[2]),
+#   results.subtitle = TRUE,  # Removes default subtitle
+#   #subtitle = "{test} (p = {p})", 
+#   p.adjust.method = "bonferroni",
+#   pairwise.display = "significant", #"significant"
+#   #pairwise.comparisons = TRUE,
+#   plotgrid.args = list(ncol = 12),
+#   facet_wrap.args = list(scales = "fixed", strip.position = "top"),
+#   #plot.margin = margin(0, 10, 10, 10),
+#   #point.args = list(alpha = 0.9),
+#   violin.args = list(alpha = 0),
+#   boxplot.args = list(alpha = 0),
+#   ggsignif.args = list(textsize = 3, tip_length = 0.005, step_increase = 0.05),
+#   p.value.label.args = list(
+#     parse = TRUE
+#   ),
+#   ggplot.component = list(
+#     coord_cartesian(ylim = c(0, 50)),
+#     #scale_y_continuous(labels = c(0:5, "")),
+#     scale_y_continuous(expand = expansion(mult = c(0.05, 0.55))),
+#     scale_color_manual(values = custom_colors), 
+#     #ggplot2::scale_y_continuous(limits = c(0, 50), sec.axis = ggplot2::dup_axis(name = NULL)), 
+#     ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(alpha = 1))), 
+#     theme(
+#           panel.background = element_blank(), 
+#           panel.grid.major = element_blank(),
+#           panel.grid.minor = element_blank(),
+#           plot.subtitle = element_text(hjust = 0.5, margin = margin(b = 0)),
+#           axis.text.y.right = ggplot2::element_blank(), 
+#           axis.ticks.y.right = ggplot2::element_blank(),
+#           axis.ticks.x = ggplot2::element_blank(),
+#           axis.text.x = element_text(family = "Arial", face = "plain",size = 13, color = "black", angle = 25, hjust = 0.6),
+#           axis.title.y = element_text(family = "Arial", face = "plain", size = 13, color = "black"),
+#           plot.title = element_text(family = "Arial", face = "plain", size = 13, color = "black", hjust = 0.5, margin = margin(b = 0))))
+#   ) 
+# annot <- g[[1]]$layers[[4]]$stat_params$annotations
+# annot <- gsub("list\\(italic\\(p\\)\\[\\\"FDR\\\"\\s*-\\s*adj\\.\\] == \"", "list(FDR == ", annot)
+# annot <- gsub("\"\\)", ")", annot)
+# 
+# for (i in 1:46) {
+#   print(g[[i]])
+#   print(g[[1]]$layers[[4]]$stat_params$annotations)
+#   
+#   # Check if the current g[[i]] contains annotations
+#   if (!is.null(g[[i]]$layers[[4]]$stat_params$annotations)) {
+#     
+#     # Extract the annotations for this g[[i]]
+#     annotations <- g[[i]]$layers[[4]]$stat_params$annotations
+#     
+#     # Modify the annotations by removing unwanted parts
+#     annotations_modified <- unlist(lapply(annotations, function(annot) {
+#       # Remove LaTeX parts (italic(p) and adj.)
+#       annot <- gsub("list\\(italic\\(p\\)\\[\\\"FDR\\\"\\s*-\\s*adj\\.\\] == \"", "list(FDR == ", annot)
+#       annot <- gsub("\"\\)", ")", annot)  # Remove the trailing ')'
+#       annot <- sapply(annot, function(x) {
+#         # Extract the numeric value
+#         num <- as.numeric(gsub(".*==\\s*([0-9.eE+-]+).*", "\\1", x))
+#         
+#         # Check and replace
+#         if (num < 0.001) {
+#           gsub("==.*", "< 0.001)", x)
+#         } else {
+#           x
+#         }
+#       })
+#       return(annot)
+#     }))
+#     
+#     # Update the annotations in g[[i]]
+#     g[[i]]$layers[[4]]$stat_params$annotations <- annotations_modified
+#   }
+#   if(!is.null(g[[i]]$labels$subtitle)){
+#     subtitle <- g[[i]]$labels$subtitle
+#     print(subtitle)
+#     subtitle_str <- deparse(subtitle)  
+#     subtitle_str <- paste(subtitle_str, collapse = " ")  # Ensure it's a single string
+#     
+#     # Extract only "Kruskal-Wallis: italic(p) == value"
+#     subtitle_mod <- str_replace(subtitle_str, 'list\\(chi\\["Kruskal-Wallis"\\]\\^2.*?italic\\(p\\) ==      "', "Kruskal-Wallis: p = ")
+#     subtitle_mod <- str_replace(subtitle_mod, '", widehat\\(epsilon\\)\\["ordinal"\\]\\^2.*', "")
+#     
+#     print(subtitle_mod)
+#     g[[i]]$labels$subtitle <- subtitle_mod
+#   }
+# }
+# 
+# gb <- ggplot_build(g)
+# gb$data
+# # Now print or display the modified plot
+# pdf("Desktop/UiO/Project 1/Figures/draw/Difference_DSS2_per_drug_v1.pdf", width = 80, height = 30)
+# ggplot_build(g)
+# dev.off()
+# 
+# ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/Difference_DSS2_per_drug_v1.png", plot = g, width = 80, height = 30, units = "cm", limitsize = FALSE)
+# ggsave("Desktop/UiO/Project 1/Figures/draw/Difference_DSS2_per_drug_sample.png", plot = g, width = 8, height = 8, dpi = 300, limitsize = FALSE)
+# 
+# g <- grouped_ggbetweenstats( # paired samples
+#   data = subset(filtered_data, drug != "001, RAD"),
+#   x = lab,
+#   y = DSS2,
+#   grouping.var = drug,
+#   type = "nonparametric", # for wilcoxon
+#   centrality.plotting = FALSE, # remove median
+#   xlab = "",        
+#   ylab = "DSS2",
+#   results.subtitle = TRUE,  # Removes default subtitle
+#   #subtitle = "{test} (p = {p})", 
+#   p.adjust.method = "fdr",
+#   pairwise.display = "none", #"significant"
+#   #pairwise.comparisons = TRUE,
+#   plotgrid.args = list(nrow = 2, ncol = 2),
+#   facet_wrap.args = list(scales = "fixed", strip.position = "top"),
+#   plot.margin = margin(0, 10, 10, 10),
+#   #point.args = list(alpha = 0.9),
+#   violin.args = list(alpha = 0),
+#   boxplot.args = list(alpha = 0),
+#   #ggsignif.args = list(textsize = 3, tip_length = 0.005, step_increase = 0.05),
+#   ggplot.component = list(
+#     coord_cartesian(ylim = c(0, 50)),
+#     #scale_y_continuous(labels = c(0:5, "")),
+#     #scale_y_continuous(expand = expansion(mult = c(0.05, 0.55))),
+#     scale_color_manual(values = custom_colors), 
+#     #ggplot2::scale_y_continuous(limits = c(0, 50), sec.axis = ggplot2::dup_axis(name = NULL)), 
+#     ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(alpha = 1))), 
+#     theme(
+#       panel.background = element_blank(), 
+#       panel.grid.major = element_blank(),
+#       panel.grid.minor = element_blank(),
+#       plot.subtitle = element_text(hjust = 0.5, margin = margin(b = 0)),
+#       axis.text.y.right = ggplot2::element_blank(), 
+#       axis.ticks.y.right = ggplot2::element_blank(),
+#       axis.ticks.x = ggplot2::element_blank(),
+#       axis.text.x = element_text(family = "Arial", face = "plain",size = 12, color = "black", angle = 25, hjust = 0.6), #0.6
+#       axis.title.y = element_text(family = "Arial", face = "plain", size = 12, color = "black"),
+#       plot.title = element_text(family = "Arial", face = "plain", size = 12, color = "black", hjust = 0.5, margin = margin(b = 0))))
+# ) 
+# 
+# for (i in 1:4) {
+#   if(!is.null(g[[i]]$labels$subtitle)){
+#     subtitle <- g[[i]]$labels$subtitle
+#     print(subtitle)
+#     subtitle_str <- deparse(subtitle)  
+#     subtitle_str <- paste(subtitle_str, collapse = " ")  # Ensure it's a single string
+#     
+#     # Extract only "Kruskal-Wallis: italic(p) == value"
+#     subtitle_mod <- str_replace(subtitle_str, 'list\\(chi\\["Kruskal-Wallis"\\]\\^2.*?italic\\(p\\) ==      "', "p = ")
+#     subtitle_mod <- str_replace(subtitle_mod, '", widehat\\(epsilon\\)\\["ordinal"\\]\\^2.*', "")
+#     
+#     print(subtitle_mod)
+#     g[[i]]$labels$subtitle <- subtitle_mod
+#   }
+# }
+# print(g)
+# 
+# 
+# g <- grouped_ggbetweenstats( # paired samples
+#   data = all_response_metrics,
+#   x = lab,
+#   y = DSS2_boxcox_sclaed2,
+#   grouping.var = drug,
+#   type = "nonparametric", # for wilcoxon
+#   centrality.plotting = FALSE, # remove median
+#   ggstatsplot.layer = TRUE,
+#   xlab = "",        
+#   ylab = "Box-Cox transformed Z-scaled DSS2",
+#   results.subtitle = TRUE,  # Removes default subtitle
+#   #subtitle = "{test} (p = {p})", 
+#   p.adjust.method = "fdr",
+#   pairwise.display = "significant", #"significant"
+#   #pairwise.comparisons = TRUE,
+#   #plotgrid.args = list(nrow = 2, ncol = 2),
+#   facet_wrap.args = list(scales = "fixed", strip.position = "top"),
+#   #plot.margin = margin(0, 10, 10, 10),
+#   #point.args = list(alpha = 0.9),
+#   violin.args = list(alpha = 0),
+#   boxplot.args = list(alpha = 0),
+#   ggsignif.args = list(textsize = 3, tip_length = 0.005, step_increase = 0.05),
+#   ggplot.component = list(
+#     coord_cartesian(ylim = c(-4, 4)),
+#     #scale_y_continuous(labels = c(0:5, "")),
+#     scale_y_continuous(expand = expansion(mult = c(0.05, 0.55))),
+#     scale_color_manual(values = custom_colors), 
+#     #ggplot2::scale_y_continuous(limits = c(0, 50), sec.axis = ggplot2::dup_axis(name = NULL)), 
+#     ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(alpha = 1))), 
+#     theme(
+#       panel.background = element_blank(), 
+#       panel.grid.major = element_blank(),
+#       panel.grid.minor = element_blank(),
+#       plot.subtitle = element_text(hjust = 0.5, margin = margin(b = 0)),
+#       axis.text.y.right = ggplot2::element_blank(), 
+#       axis.ticks.y.right = ggplot2::element_blank(),
+#       axis.ticks.x = ggplot2::element_blank(),
+#       axis.text.x = element_text(family = "Arial", face = "plain",size = 13, color = "black", angle = 25, hjust = 0.6),
+#       axis.title.y = element_text(family = "Arial", face = "plain", size = 13, color = "black"),
+#       plot.title = element_text(family = "Arial", face = "plain", size = 13, color = "black", hjust = 0.5, margin = margin(b = 0))))
+# ) 
+# 
+# for (i in 1:46) {
+#   print(g[[i]])
+#   print(g[[1]]$layers[[4]]$stat_params$annotations)
+#   
+#   # Check if the current g[[i]] contains annotations
+#   if (!is.null(g[[i]]$layers[[4]]$stat_params$annotations)) {
+#     
+#     # Extract the annotations for this g[[i]]
+#     annotations <- g[[i]]$layers[[4]]$stat_params$annotations
+#     
+#     # Modify the annotations by removing unwanted parts
+#     annotations_modified <- unlist(lapply(annotations, function(annot) {
+#       # Remove LaTeX parts (italic(p) and adj.)
+#       annot <- gsub("list\\(italic\\(p\\)\\[\\\"FDR\\\"\\s*-\\s*adj\\.\\] == \"", "list(FDR == ", annot)
+#       annot <- gsub("\"\\)", ")", annot)  # Remove the trailing ')'
+#       return(annot)
+#     }))
+#     
+#     # Update the annotations in g[[i]]
+#     g[[i]]$layers[[4]]$stat_params$annotations <- annotations_modified
+#   }
+#   if(!is.null(g[[i]]$labels$subtitle)){
+#     subtitle <- g[[i]]$labels$subtitle
+#     print(subtitle)
+#     subtitle_str <- deparse(subtitle)  
+#     subtitle_str <- paste(subtitle_str, collapse = " ")  # Ensure it's a single string
+#     
+#     # Extract only "Kruskal-Wallis: italic(p) == value"
+#     subtitle_mod <- str_replace(subtitle_str, 'list\\(chi\\["Kruskal-Wallis"\\]\\^2.*?italic\\(p\\) ==      "', "Kruskal-Wallis: p-value = ")
+#     subtitle_mod <- str_replace(subtitle_mod, '", widehat\\(epsilon\\)\\["ordinal"\\]\\^2.*', "")
+#     
+#     print(subtitle_mod)
+#     g[[i]]$labels$subtitle <- subtitle_mod
+#   }
+# }
+# 
+# # Now print or display the modified plot
+# print(g)
+# g[[1]]$labels$subtitle
+# ggsave("Desktop/UiO/Project 1/Figures/draw/Difference_box_cox_sclaed_DSS2_per_drug.png", plot = g, width = 50, height = 90, units = "cm", limitsize = FALSE)
+# 
+#   
+# s <- grouped_ggbetweenstats( # paired samples
+#   data = all_datasets_v2,
+#   x = lab,
+#   y = DSS2_boxcox_sclaed2,
+#   grouping.var = drug,
+#   type = "nonparametric", # for wilcoxon
+#   centrality.plotting = FALSE # remove median
+# )
+# extract_stats(g)
+# 
+# ggsave("Desktop/UiO/Project 1/Figures/V3/Difference_DSS2_per_drug_box_cox_scaled.pdf", plot = s, width = 150, height = 250, units = "cm", limitsize = FALSE)
 
 overall_lab_difference_model <- lmer(DSS2_boxcox_sclaed2 ~ drug + (1|Patient.num) + (lab|drug), all_datasets_v2)
 summary(overall_lab_difference_model)
@@ -1389,6 +2582,7 @@ model <- mixed_model_time_until_sample_usage_box_cox_scaled_re_intercept
   fitted_values <- fitted(model)
   all_datasets_v2$residuals_marginal <- residuals(model, type = "pearson")
   all_datasets_v2$fitted_values <- fitted(model)
+
 #----Visualization good!!----
 require(flexplot)
 data <- subset(all_datasets_v2, !is.na(medium))
@@ -4553,8 +5747,9 @@ scaled_p1_all_metric$heights <- scaled_p1_all_metric$heights * scale_height
 scaled_p1_all_metric
 
 
+figure_output <- 'Desktop/UiO/Project 1/Figures/New karolinska data/'
 
-png('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/v1/Forest_plot_all_metric.png', height = 36, width = 56, unit = "cm", res = 300) #24.8 #height = 16, width = 46 ; height = 10, width = 28
+png(paste0(figure_output,'Forest_plot_all_metric.png'), height = 36, width = 56, unit = "cm", res = 300) #24.8 #height = 16, width = 46 ; height = 10, width = 28
 grid.newpage()
 grid.draw(scaled_p1_all_metric)
 dev.off()
@@ -4886,8 +6081,8 @@ group_counts_sample <- all_response_metrics %>%
 ##----Fresh vs Frosen & Blood vs Bone marrow & Diagnosis vs relapse----
 all_response_metrics$Disease.status <- gsub('remission', 'Remission', all_response_metrics$Disease.status)
 all_response_metrics$Disease.status <- gsub('Unknown', NA, all_response_metrics$Disease.status)
-all_response_metrics$sample <- gsub('Cryopreserved', 'frozen', all_response_metrics$sample)
-all_response_metrics$Tissue <- gsub('Leukapheresis', 'Blood', all_response_metrics$Tissue)
+all_response_metrics$sample <- gsub('Cryopreserved', 'frozen', all_response_metrics$sample) #Frozen
+all_response_metrics$Tissue <- gsub('Leukapheresis', 'Blood', all_response_metrics$Tissue) #Blood
 
 frozen_count <- all_response_metrics %>% group_by(sample, drug) %>% summarize(count = n())
 tissue_count <- all_response_metrics %>% group_by(Tissue, drug) %>% summarize(count = n())

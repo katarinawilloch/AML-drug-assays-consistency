@@ -314,31 +314,31 @@ model_diagnostics <- function(model, output_dir = NULL, check_model = TRUE, mode
                         plot.margin = margin(10, 10, 10, 10))
     plot_pp_check_adjusted <- plot_pp_check$PP_CHECK + plot_theme + labs(x = expression("BoxCox Transformed and Scaled DSS"[2]))
     print(plot_pp_check_adjusted)
-    ggsave(paste0(output_dir, "pp_check_plot.png"), plot = plot_pp_check_adjusted,width = 9, height = 6.5, units="cm")
+    #ggsave(paste0(output_dir, "pp_check_plot.png"), plot = plot_pp_check_adjusted,width = 9, height = 6.5, units="cm")
     
     linearity_plot <- check_model(model, check = "linearity", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3"))
     plot_linearity <- plot(linearity_plot)
     plot_linearity_adjusted <- plot_linearity$NCV + plot_theme
     print(plot_linearity_adjusted)
-    ggsave(paste0(output_dir, "plot_linearity_adjusted.png"), plot = plot_linearity_adjusted, width = 9, height = 6.5, units="cm")
+    #ggsave(paste0(output_dir, "plot_linearity_adjusted.png"), plot = plot_linearity_adjusted, width = 9, height = 6.5, units="cm")
     
     homogeneity_plot <- check_model(model, check = "homogeneity", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3"))
     plot_homogeneity <- plot(homogeneity_plot)
     plot_homogeneity_adjusted <- plot_homogeneity$HOMOGENEITY + labs(y = expression(sqrt("|Std. Residuals|")))+ plot_theme
     print(plot_homogeneity)
-    ggsave(paste0(output_dir, "plot_homogeneity_adjusted.png"), plot = plot_homogeneity_adjusted, width = 9, height = 6.5, units="cm")
+    #ggsave(paste0(output_dir, "plot_homogeneity_adjusted.png"), plot = plot_homogeneity_adjusted, width = 9, height = 6.5, units="cm")
     
     influential_plot <- check_model(model, check = "outliers", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3", "black"))
     plot_influential <- plot(influential_plot)  
     plot_influential_adjusted <- plot_influential$OUTLIERS + plot_theme
     print(plot_influential_adjusted)
-    ggsave(paste0(output_dir, "plot_influential_adjusted.png"), plot = plot_influential_adjusted, width = 9, height = 6.5, units="cm")
+    #ggsave(paste0(output_dir, "plot_influential_adjusted.png"), plot = plot_influential_adjusted, width = 9, height = 6.5, units="cm")
     
     normality_plot <- check_model(model, check = "qq", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3"))
     plot_normality <- plot(normality_plot)
     plot_normality_adjusted <- plot_normality$QQ + plot_theme
     print(plot_normality_adjusted)
-    ggsave(paste0(output_dir, "plot_normality_adjusted.png"), plot = plot_normality_adjusted, width = 7.94, height = 7.49, units="cm")
+    #ggsave(paste0(output_dir, "plot_normality_adjusted.png"), plot = plot_normality_adjusted, width = 7.94, height = 7.49, units="cm")
     
     random_effects_plot <- check_model(model, check = "reqq", panel = F, title_size = 10, axis_title_size = 10, base_size = 8, colors = c("#fccde5", "#80b1d3"))
     
@@ -368,11 +368,11 @@ model_diagnostics <- function(model, output_dir = NULL, check_model = TRUE, mode
     plot_random_effects <- plot(random_effects_plot)
     plot_random_effects_adjusted_1 <- plot_random_effects[[1]] + plot_theme + labs(title = "Normality of Random Effects - Patient") 
     print(plot_random_effects_adjusted_1)
-    ggsave(paste0(output_dir, "random_effects_check_1.png"), plot = plot_random_effects_adjusted_1, width = 9, height = 6.5, units="cm")
+    #ggsave(paste0(output_dir, "random_effects_check_1.png"), plot = plot_random_effects_adjusted_1, width = 9, height = 6.5, units="cm")
     
     plot_random_effects_adjusted_2 <- plot_random_effects[[2]] + plot_theme + labs(title = "Normality of Random Effects - Drug")
     print(plot_random_effects_adjusted_2)
-    ggsave(paste0(output_dir, "random_effects_check_2.png"), plot = plot_random_effects_adjusted_2, width = 9, height = 6.5, units="cm")
+    #ggsave(paste0(output_dir, "random_effects_check_2.png"), plot = plot_random_effects_adjusted_2, width = 9, height = 6.5, units="cm")
     
     
     marginal_residuals <- model.response(model.frame(model)) - predict(model, re.form = NA)

@@ -285,7 +285,6 @@ write_csv(all_response_metrics, paste0(initial_cleansing,'all_metrices_all_labs_
 patient_count <- subset(all_response_metrics, select = c("Patient_ID", "lab")) %>%distinct() %>% group_by(lab) %>% dplyr::summarize(count = n())
 print(patient_count)
 
-
 #Modeling----
 ##Box Cox transformation and Z scaling----
 ###DSS2----
@@ -300,6 +299,23 @@ for(j in unique(all_response_metrics$drug)){
   all_response_metrics$DSS2_boxcox_sclaed2[all_response_metrics$drug==j] <-
     scale(all_response_metrics$DSS2_boxcox[all_response_metrics$drug==j])
 }
+ggplot(all_response_metrics, aes(x=DSS2)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("DSS2")
+
+ggplot(all_response_metrics, aes(x=DSS2_boxcox)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled DSS2")
+
+ggplot(all_response_metrics, aes(x=DSS2_boxcox_sclaed2)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled DSS2")
 
 ###AUC----
 all_response_metrics$AUC_pos <- all_response_metrics$AUC + 0.01
@@ -315,13 +331,22 @@ for(j in unique(all_response_metrics$drug)){
 }
 
 ggplot(all_response_metrics, aes(x=AUC)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("AUC")
 
 ggplot(all_response_metrics, aes(x=AUC_boxcox)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled AUC")
 
 ggplot(all_response_metrics, aes(x=AUC_boxcox_sclaed2)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled AUC")
 
 ###IC50----
 all_response_metrics$IC50_pos <- all_response_metrics$IC50 + 0.01
@@ -368,12 +393,23 @@ for(j in unique(all_response_metrics$drug)){
     scale(all_response_metrics$DSS1_boxcox[all_response_metrics$drug==j])
 }
 
+ggplot(all_response_metrics, aes(x=DSS1)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("DSS1")
 
 ggplot(all_response_metrics, aes(x=DSS1_boxcox)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed DSS1")
 
 ggplot(all_response_metrics, aes(x=DSS1_boxcox_sclaed2)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue")+
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled DSS1")
 
 ###DSS3----
 all_response_metrics$DSS3_pos <- all_response_metrics$DSS3 + 0.01
@@ -388,12 +424,24 @@ for(j in unique(all_response_metrics$drug)){
     scale(all_response_metrics$DSS3_boxcox[all_response_metrics$drug==j])
 }
 
+ggplot(all_response_metrics, aes(x=DSS3)) +
+  geom_density(color="darkblue", fill="lightblue")+
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("DSS3")
 
 ggplot(all_response_metrics, aes(x=DSS3_boxcox)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue")+
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed DSS3")
 
 ggplot(all_response_metrics, aes(x=DSS3_boxcox_sclaed2)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue")+
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled DSS3")
+  
 
 ###Raw AUC----
 all_response_metrics$auc_a_pos <- all_response_metrics$auc_a - min(all_response_metrics$auc_a) + 0.1
@@ -401,27 +449,37 @@ MASS::boxcox(auc_a_pos ~ lab,
              data = all_response_metrics,
              lambda = seq(-0.25, 2, length.out = 10))
 
-all_response_metrics$auc_a_boxcox <- ((all_response_metrics$auc_a)^0.5 - 1) / 0.5
+all_response_metrics$auc_a_boxcox <- -((all_response_metrics$auc_a)^0.5 - 1) / 0.5
 
 for(j in unique(all_response_metrics$drug)){
   all_response_metrics$auc_a_boxcox_sclaed2[all_response_metrics$drug==j] <-
     scale(all_response_metrics$auc_a_boxcox[all_response_metrics$drug==j])
 }
 
+ggplot(all_response_metrics, aes(x=auc_a)) +
+  geom_density(color="darkblue", fill="lightblue")+
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("rAUC")
+
 ggplot(all_response_metrics, aes(x=auc_a_boxcox)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue")+
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed rAUC")
 
 ggplot(all_response_metrics, aes(x=auc_a_boxcox_sclaed2)) +
-  geom_density(color="darkblue", fill="lightblue")
-
-ggplot(all_response_metrics, aes(x=auc_a)) +
-  geom_density(color="darkblue", fill="lightblue")
+  geom_density(color="darkblue", fill="lightblue")+
+  theme_minimal() + 
+  ylab("Density") + 
+  xlab("BoxCox transformed z-Scaled rAUC")
 
 
 ##LMM for each experimental variable----
 # List of models and their names
 variables <- c("time_until_sample_usage", "medium", "cells", "positive_control", "centrifugation_procedure", "plate_reader")
 metrics <- c("IC50", "DSS1", "DSS2", "DSS3", "auc_a", "AUC")
+metrics <- c("DSS2","DSS2_boxcox", "DSS2_boxcox_sclaed2")
 models <- list()
 for (m in metrics[1:6]){
   for (v in variables){
@@ -440,7 +498,7 @@ for (m in metrics[1:6]){
     f <- as.formula(formula_str)
     model_name <- paste0(m, "_by_", v)
     models[[model_name]] <- lmer(f,all_response_metrics)
-    #model_diagnostics(models[[model_name]], paste0("/Users/katarinawilloch/Desktop/UiO/Project 1/Code/Diagnostic plots/", m, "/", v, "/"), model_name = model_name_plot, metric = m) 
+    model_diagnostics(models[[model_name]], paste0("/Users/katarinawilloch/Desktop/UiO/Project 1/Code/Diagnostic plots/", m, "_", v, "_"), model_name = model_name_plot, metric = m) 
     print(summary(models[[model_name]]))
   }
 }
@@ -637,7 +695,7 @@ p1_all_metric <- forest(
   grid = F,
   xlim = c(-2.0, 2.0),
   #ticks_at = c(-2, -1, 0, 1, 2),
-  footnote = "\nᵃBonferroni corrected",
+  #footnote = "\nᵃBonferroni corrected",
   font.label = list(size = 18, family = "Arial"),
   font.ticks = list(size = 18, family = "Arial"),
   nudge_y = 0.15,
@@ -1003,31 +1061,33 @@ ggsave(paste0(figure_output,"Karolinska_fresh_vs_frozen.png"), plot = scatterplo
 ####Oslo----
 ###Diagnosis vs Relapse----
 ###Blood vs Bone marrow----
-tissue_same_sample <- all_response_metrics %>%
+####Beat AML----
+tissue_same_sample_beat_aml <- all_response_metrics %>%
   group_by(Patient_ID) %>%
+  filter(lab == 'Beat AML') %>%
   summarise(unique_x_count = n_distinct(Tissue)) %>%
   filter(unique_x_count >= 2)
 
-tissue_filtered <- all_response_metrics[all_response_metrics$Patient_ID %in% tissue_same_sample$Patient_ID, ]
+tissue_filtered_beat_AML <- all_response_metrics[all_response_metrics$Patient_ID %in% tissue_same_sample_beat_aml$Patient_ID, ]
 
-tissue_filtered <- tissue_filtered %>% mutate(Patient_ID == ifelse(
+tissue_filtered_beat_AML <- tissue_filtered_beat_AML %>% mutate(Patient_ID = ifelse(
   Patient_ID != "2085" &
   Patient_ID != "2219" &
   Patient_ID != "2292", Patient_ID, Patient.num)) 
-unique(subset(tissue_filtered, Patient_ID == '2085', select = c('Patient.num', 'Patient_ID')))
+unique(subset(tissue_filtered_beat_AML, Patient_ID == '2085', select = c('Patient.num', 'Patient_ID')))
 
-tissue_df <- subset(tissue_filtered, Patient_ID != "2085" & Patient_ID != "2219" & Patient_ID != "2292") %>%
+tissue_df_beat_AML <- subset(tissue_filtered_beat_AML) %>%
   group_by(Patient_ID, drug) %>%
   reframe(
-    Blood = DSS2[Tissue == 'Blood'],
+    `Peripheral Blood` = DSS2[Tissue == 'Blood'],
     `Bone Marrow` = DSS2[Tissue == 'Bone marrow']
   )
 
 # View the new data frame
-print(tissue_df)
+print(tissue_df_beat_AML)
 
 
-pearson_cor_test <- cor.test(tissue_df$Blood, tissue_df$`Bone Marrow`, method = "pearson")
+pearson_cor_test <- cor.test(tissue_df_beat_AML$`Peripheral Blood`, tissue_df_beat_AML$`Bone Marrow`, method = "pearson")
 pearson_cor <- pearson_cor_test$estimate
 p_value <- pearson_cor_test$p.value
 
@@ -1042,15 +1102,90 @@ custom_colors <- c(
   "#80b1d3", "#fdb462", "#b3de69", "#fccde5", 
   "#bc80bd", "#ccebc5"  # Added two complementary colors
 )
+
+# Get Set3 (12 colors) and Paired (12 colors)
+set3 <- brewer.pal(12, "Set3")
+paired <- brewer.pal(12, "Paired")
+library(colorspace)
+
+# 21 pastel colors
+paired <- qualitative_hcl(12, palette = "Pastel 1")
+
+# Combine and take 21 unique-looking colors
+my_colors <- c(paired, set3)[1:21]
+# Create the plot
+scatterplot_blood_bone_marrow_beat_AML <- ggplot(tissue_df_beat_AML, aes(x = `Peripheral Blood`, y = `Bone Marrow`)) +
+  geom_point(aes(color = factor(Patient_ID)), size = 3) +
+  ylim(0, 55) + 
+  xlim(0,55) +
+  coord_fixed(ratio = 1)+
+  geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
+  scale_color_manual(values = my_colors)+
+  annotate(
+    "text", 
+    x = 0, y = 55, 
+    label = annotation_text, 
+    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+  ) +
+  labs(color = "Patient ID", x= expression("Peripheral Blood DSS"[2]), y = expression("Bone Marrow DSS"[2])) +
+  theme_classic() + 
+  theme(
+    text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
+    axis.text = element_text(size = 8, family = "Arial"), # Tick labels Arial, size 8
+    legend.text = element_text(size = 8, family = "Arial", margin = margin(l = -5, unit = "pt")), # Legend text Arial, size 10
+    legend.title = element_text(size = 8, family = "Arial", hjust=0.5), # Legend title Arial, size 10
+    legend.position = "right",
+    legend.background = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_blank(), # Optional: Remove background panel
+    plot.background = element_blank()   # Optional: Remove plot background
+  )
+scatterplot_blood_bone_marrow_beat_AML
+ggsave(paste0(figure_output,"Bloor_Bone_Marrow_beat_AML.png"), plot = scatterplot_blood_bone_marrow_beat_AML, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+####Oslo and Karolinska----
+tissue_same_sample_oslo_karolinska <- all_response_metrics %>%
+  group_by(Patient_ID) %>%
+  filter(lab == 'Oslo') %>%
+  summarise(unique_x_count = n_distinct(Tissue)) %>%
+  filter(unique_x_count >= 2)
+
+tissue_filtered_oslo_karolinska <- all_response_metrics[all_response_metrics$Patient_ID %in% tissue_same_sample_oslo_karolinska$Patient_ID, ]
+
+tissue_df_oslo_karolinska <- subset(tissue_filtered_oslo_karolinska) %>%
+  group_by(Patient_ID, drug) %>%
+  reframe(
+    `Peripheral Blood` = DSS2[Tissue == 'Blood'],
+    `Bone Marrow` = DSS2[Tissue == 'Bone marrow']
+  )
+# View the new data frame
+print(tissue_df_oslo_karolinska)
+
+
+pearson_cor_test <- cor.test(tissue_df_oslo_karolinska$`Peripheral Blood`, tissue_df_oslo_karolinska$`Bone Marrow`, method = "pearson")
+pearson_cor <- pearson_cor_test$estimate
+p_value <- pearson_cor_test$p.value
+
+# Prepare the annotation text
+annotation_text <- paste0(
+  "R = ", round(pearson_cor, 3), 
+  "\np ", ifelse(format(p_value, scientific = TRUE, digits = 3)<0.001,paste("=",format(p_value, scientific = TRUE, digits = 3)), "<0.001")
+)
+
+custom_colors <- c(
+  "#8dd3c7", "#fdb462", "#bebada", "#fb8072", 
+  "#80b1d3", "#fdb462", "#b3de69", "#fccde5", 
+  "#bc80bd", "#ccebc5"  # Added two complementary colors
+)
 display.brewer.pal(n = 10, name = "Set3")
 # Create the plot
-scatterplot_blood_bone_marrow <- ggplot(tissue_df, aes(x = Blood, y = `Bone Marrow`)) +
+scatterplot_blood_bone_marrow_oslo_karolinska <- ggplot(tissue_df_oslo_karolinska, aes(x = `Peripheral Blood`, y = `Bone Marrow`)) +
   geom_point(aes(color = factor(Patient_ID)), size = 3) +
   ylim(0, 45) + 
   xlim(0,45) +
   coord_fixed(ratio = 1)+
   geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
-  #scale_color_manual(values = custom_colors) +
+  scale_color_manual(values = custom_colors) +
   annotate(
     "text", 
     x = 0, y = 45, 
@@ -1062,8 +1197,9 @@ scatterplot_blood_bone_marrow <- ggplot(tissue_df, aes(x = Blood, y = `Bone Marr
   theme(
     text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
     axis.text = element_text(size = 8, family = "Arial"), # Tick labels Arial, size 8
-    legend.text = element_text(size = 10, family = "Arial"), # Legend text Arial, size 10
-    legend.title = element_text(size = 10, family = "Arial"), # Legend title Arial, size 10
+    legend.text = element_text(size = 8, family = "Arial", margin = margin(l = -5, unit = "pt")), # Legend text Arial, size 10
+    legend.title = element_text(size = 8, family = "Arial", hjust=0.5), # Legend title Arial, size 10
+    legend.position = "right",
     legend.background = element_blank(),
     panel.grid.major = element_blank(),  # Remove major grid lines
     panel.grid.minor = element_blank(),  # Remove minor grid lines
@@ -1071,8 +1207,7 @@ scatterplot_blood_bone_marrow <- ggplot(tissue_df, aes(x = Blood, y = `Bone Marr
     plot.background = element_blank()   # Optional: Remove plot background
   )
 
-ggsave(paste0(figure_output,"Bloor_Bone_Marrow.png"), plot = scatterplot_blood_bone_marrow, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
-
+ggsave(paste0(figure_output,"Bloor_Bone_Marrow_oslo_karolinska.png"), plot = scatterplot_blood_bone_marrow_oslo_karolinska, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
 
 
 ##Model assessment biospecimen----
@@ -1105,9 +1240,9 @@ mixed_model_sample_DSS2_6 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Diseas
 
 anova(mixed_model_sample_DSS2, mixed_model_sample_DSS2_1, mixed_model_sample_DSS2_2, mixed_model_sample_DSS2_3, mixed_model_sample_DSS2_4, mixed_model_sample_DSS2_5, mixed_model_sample_DSS2_6, test = "LRT")
 
-dss2_models_sample <-c(mixed_model_sample_DSS2_1)
 
 ##Forestplot biospecimen----
+dss2_models_sample <-c(mixed_model_sample_DSS2_1)
 df_dss2_models_sample <- model_results(dss2_models_sample)
 df_dss2_models_sample$Random_Effect_Term <- '(1|Patient.num) + (0 + Lab | Drug)'
 colnames(df_dss2_models_sample) <- gsub("_", " ", colnames(df_dss2_models_sample))     
@@ -1165,7 +1300,7 @@ p_sample <- forest(df_dss2_models_sample[,c('Biospecimen Type', 'Reference Group
 # Print plot
 plot(p_sample)
 p_wh <- get_wh(p_sample)
-pdf('/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/Forest_plot_DSS2_biospecimens.pdf',width = p_wh[1], height = 6)
+pdf(paste0(figure_output,'Forest_plot_DSS2_biospecimens.pdf'),width = p_wh[1], height = 6)
 plot(p_sample)
 dev.off()
 
@@ -1210,10 +1345,427 @@ grid.newpage()
 grid.draw(scaled_p_sample_all_metric)
 dev.off()
 
+##Combat analysis----
+all_datasets_for_heatmap <- pivot_wider(subset(all_response_metrics, select=c(drug, DSS2, lab, Patient.num)), names_from = drug, values_from = DSS2, values_fn = list(DSS2 = mean)) %>% as.data.frame()
+rownames(all_datasets_for_heatmap) <- all_datasets_for_heatmap$Patient.num
+all_datasets_for_heatmap$Patient.num <- NULL
+#all_datasets_for_heatmap$lab <- NULL
+
+# Calculate proportion of missing values per column
+missing_prop <- colMeans(is.na(all_datasets_for_heatmap))
+
+# Keep columns with <= 30% missing
+all_datasets_for_heatmap <- all_datasets_for_heatmap[, missing_prop <= 0.2]
+all_datasets_for_heatmap <- na.omit(all_datasets_for_heatmap)
+
+subset(all_datasets_for_heatmap, lab == 'Helsinki')
+
+all_datasets_for_heatmap_1 <- as.data.frame(all_datasets_for_heatmap)
+all_datasets_for_heatmap_1$lab <- NULL
+
+dim(all_datasets_for_heatmap_1)
+
+batch <- all_datasets_for_heatmap$lab
+mod <- model.matrix(~1, data = data.frame(batch = batch))  # Null model (no covariates)
+all_datasets_for_heatmap_combatch <- ComBat(dat = t(all_datasets_for_heatmap_1), batch = batch, mod = mod, prior.plots = TRUE)
+dim(all_datasets_for_heatmap_combatch)
+
+##PPCA Combat data 
+ppca_metrics <- pca(t(all_datasets_for_heatmap_combatch), method="ppca", nPcs=3, seed=123)
+## Get the estimated complete observations
+ppca_scores_metrics <- scores(ppca_metrics)
+ppca_data_metrics <- merge(ppca_scores_metrics, all_datasets_for_heatmap, by = 'row.names')
+#ppca_data_metrics$lab <- gsub('BeatAML', 'Beat AML', ppca_data_metrics$lab)
+ppca_data_metrics$Lab <- factor(ppca_data_metrics$lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
+
+combat_ppca_plot <- ggplot(as.data.frame(ppca_data_metrics), aes(x = PC1, y = PC2, color=Lab)) +
+  geom_point() +
+  #geom_text_repel(data = furthest_points, aes(label = Patient.num), size = 4, box.padding = 0.5, max.overlaps = 20) +
+  #scale_color_gradient(low = "lightblue", high = "blue") + 
+  scale_color_manual(values = c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")) +
+  labs(color = "") + 
+  guides(
+    color = guide_legend(
+      override.aes = aes(shape = 15, size = 4, width = 1.5, height = 1),  # Adjust legend symbol size
+      label.spacing = unit(0.5, "cm")  # Reduce space between text and legend symbol
+    )
+  ) +  
+  #theme_minimal()+
+  theme(
+    panel.background = element_blank(), 
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.text = element_text(size = 12, family = "Arial"),    # Center legend text
+    legend.position = "top",                                
+    legend.justification = "center",        # Ensure the legend is centered
+    legend.box = "horizontal",
+    legend.key = element_blank(),                            # Remove key background
+    legend.spacing.x = unit(0.2, "cm"),  
+    legend.key.size = unit(0.5, "lines"),      # Adjust size of the colored squares
+    legend.margin = margin(t = 0, b = 0, l = 0, r = 0),
+    plot.margin = margin(10, 10, 10, 10),
+    axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
+    axis.text = element_text(size = 10, family = "Arial")
+  )
+
+ppca_metrics_org_combat_data <- pca(all_datasets_for_heatmap_1, method="ppca", nPcs=3, seed=123)
+## Get the estimated complete observations
+ppca_scores_metrics_org_combat_data <- scores(ppca_metrics_org_combat_data)
+ppca_scores_metrics_org_combat_data <- merge(ppca_scores_metrics_org_combat_data, all_datasets_for_heatmap, by = 'row.names')
+#ppca_data_metrics$lab <- gsub('BeatAML', 'Beat AML', ppca_data_metrics$lab)
+ppca_scores_metrics_org_combat_data$Lab <- factor(ppca_scores_metrics_org_combat_data$lab, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
+
+ppca_plot_org_combat_data <- ggplot(as.data.frame(ppca_scores_metrics_org_combat_data), aes(x = PC1, y = PC2, color=Lab)) +
+  geom_point() +
+  scale_color_manual(values = c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")) +
+  labs(color = "") + 
+  guides(
+    color = guide_legend(
+      override.aes = aes(shape = 15, size = 4, width = 1.5, height = 1),  # Adjust legend symbol size
+      label.spacing = unit(0.5, "cm")  # Reduce space between text and legend symbol
+    )
+  ) +  
+  #theme_minimal()+
+  theme(
+    panel.background = element_blank(), 
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.text = element_text(size = 12, family = "Arial"),    # Center legend text
+    legend.position = "top",                                
+    legend.justification = "center",        # Ensure the legend is centered
+    legend.box = "horizontal",
+    legend.key = element_blank(),                            # Remove key background
+    legend.spacing.x = unit(0.2, "cm"),  
+    legend.key.size = unit(0.5, "lines"),      # Adjust size of the colored squares
+    legend.margin = margin(t = 0, b = 0, l = 0, r = 0),
+    plot.margin = margin(10, 10, 10, 10),
+    axis.title = element_text(size = 12, family = "Arial"),    # Axis title size
+    axis.text = element_text(size = 10, family = "Arial")
+  )
+
+#Combining the two datasets
+all_datasets_for_heatmap_1$Patient.num <- rownames(all_datasets_for_heatmap_1)
+combatch_t <- as.data.frame(t(all_datasets_for_heatmap_combatch))
+combatch_t$Patient.num <- rownames(combatch_t)
+all_dataset_filtered <- gather(all_datasets_for_heatmap_1, drug, DSS2, '345627-80-7':'Rapamycin', factor_key=TRUE)
+combatch_long <- gather(combatch_t, drug, combat, '345627-80-7':'Rapamycin', factor_key=TRUE)
+combatch_all_data <- inner_join(all_dataset_filtered, combatch_long, by = c("drug", "Patient.num"))
+combatch_all_datasets <- inner_join(combatch_all_data, all_response_metrics, by = c("drug", "Patient.num", "DSS2"))
+
+g_combat <- grouped_ggbetweenstats( # paired samples
+  data = combatch_all_datasets,
+  x = lab,
+  y = combat,
+  grouping.var = drug,
+  type = "nonparametric", # for wilcoxon
+  centrality.plotting = FALSE # remove median
+)
+
+combatch_all_datasets_heatmap <- pivot_wider(combatch_all_datasets[,c("drug", "Patient.num", "lab", "combat")], names_from = drug, values_from = "combat", values_fn = ~mean(.x, na.rm = TRUE))
+print(combatch_all_datasets_heatmap)
+
+heatmap_metrics <- as.data.frame(combatch_all_datasets_heatmap)
+print(rownames(heatmap_metrics))
+
+rownames(heatmap_metrics) <- make.names(heatmap_metrics$Patient.num, unique = TRUE)
+
+#heatmap_metrics <- t(as.matrix(heatmap_metrics[,-c(1, 2)]))
+dist_no_na <- function(x) {
+  #d <- daisy(x, metric = "euclidean")
+  d <- as.dist(proxy::dist(x, method = "euclidean", pairwise = TRUE))  # pairwise handles NAs
+  d[is.na(d)] <- max(d, na.rm = TRUE)  # Replace NA distances with max value
+  as.dist(d)
+}
+
+col_anno <- subset(heatmap_metrics, select="lab") %>% dplyr::rename(Study = lab) %>% as.data.frame()
+col_anno <- factor(col_anno$Study, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
+levels(col_anno)
+a_col_h <- ComplexHeatmap::HeatmapAnnotation(Study = col_anno, 
+                                             col = list(Study= c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")), show_annotation_name = FALSE, gp = gpar(fonface = "plain"))
+print(a_col_h)
+
+heatmap_metrics <- t(as.matrix(heatmap_metrics[,-c(1, 2)]))
+
+h <- ComplexHeatmap::Heatmap(
+  heatmap_metrics,
+  name = "ComBat",  # Legend header
+  cluster_rows = TRUE,
+  cluster_columns = TRUE,
+  clustering_method_rows = "ward.D",
+  clustering_method_columns = "ward.D2",
+  row_names_gp = gpar(fontsize = 9),  # Row font size 10
+  column_names_gp = gpar(fontsize = 1),  # Column font size 10
+  show_row_dend = TRUE,
+  show_column_dend = TRUE,
+  show_column_names = FALSE,
+  top_annotation = a_col_h,  # Column annotations
+  left_annotation = NULL,  # Row annotations
+  na_col = "grey",
+  row_gap = unit(1, "cm"),             # Space between rows
+  column_gap = unit(1, "cm"),          # Space between columns
+  heatmap_legend_param = list(
+    title = "Combat",  # Add header to the legend
+    title_gp = gpar(fontsize = 11, fontface = "bold"),  # Legend title font
+    labels_gp = gpar(fontsize = 10), 
+    grid_height = unit(8, "mm")
+  ),
+  #annotation_legend_param = list(title = ""), 
+  width = unit(8, "cm"),  # 12 #20
+  height = unit(11, "cm"),  # 9.6 #16
+  column_title = " ",
+  column_title_gp = gpar(fontsize = 20), 
+  row_dend_width = unit(2, "cm"),
+  clustering_distance_rows = "euclidean",
+  column_dend_height = unit(2, "cm"),
+  clustering_distance_columns = dist_no_na
+)
+
+plot(
+  h,
+  heatmap_legend_side = "right",
+  annotation_legend_side = "right",
+  merge_legends = TRUE, 
+  padding = unit(c(0, 0, 0, 0), "mm")
+)
+
+heat_g <- grid.grabExpr(plot(
+  h,
+  heatmap_legend_side = "right",
+  annotation_legend_side = "right",
+  merge_legends = TRUE, 
+  padding = unit(c(0, 0, 0, 0), "mm")
+))
+
+grid.arrange(combat_ppca_plot, heat_g, ncol = 2, widths = c(1, 1))
+ggsave(paste0(figure_output,'combat_heatmap_and_ppca.png'), plot = grid.arrange(combat_ppca_plot, heat_g, ncol = 2, widths = c(1, 1)), width = 6.47 * 2, height = 5.94 * 1, dpi = 300)
 
 
+col_anno <- subset(all_datasets_for_heatmap, select="lab") %>% dplyr::rename(Study = lab) %>% as.data.frame()
+col_anno <- factor(col_anno$Study, levels = c("Beat AML", "Oslo", "Helsinki", "Karolinska"))
+levels(col_anno)
+a_col_h <- ComplexHeatmap::HeatmapAnnotation(Study = col_anno, 
+                                             col = list(Study= c("Beat AML"="#8dd3c7", "Oslo"="#fdb462", "Helsinki"= "#fb8072","Karolinska"="#80b1d3")), show_annotation_name = FALSE, gp = gpar(fonface = "plain"))
+print(a_col_h)
+
+h_org_combat_data <- ComplexHeatmap::Heatmap(
+  t(all_datasets_for_heatmap[,-1]),
+  cluster_rows = TRUE,
+  cluster_columns = TRUE,
+  clustering_method_rows = "ward.D",
+  clustering_method_columns = "ward.D2",
+  row_names_gp = gpar(fontsize = 9),  # Row font size 10
+  column_names_gp = gpar(fontsize = 1),  # Column font size 10
+  show_row_dend = TRUE,
+  show_column_dend = TRUE,
+  show_column_names = FALSE,
+  top_annotation = a_col_h,  # Column annotations
+  left_annotation = NULL,  # Row annotations
+  na_col = "grey",
+  row_gap = unit(1, "cm"),             # Space between rows
+  column_gap = unit(1, "cm"),          # Space between columns
+  heatmap_legend_param = list(
+    title = expression("DSS"[2]),  # Add header to the legend
+    title_gp = gpar(fontsize = 11, fontface = "bold"),  # Legend title font
+    labels_gp = gpar(fontsize = 10), 
+    grid_height = unit(8, "mm")
+  ),
+  #annotation_legend_param = list(title = ""), 
+  width = unit(8, "cm"),  # 12 #20
+  height = unit(11, "cm"),  # 9.6 #16
+  column_title = " ",
+  column_title_gp = gpar(fontsize = 20), 
+  row_dend_width = unit(2, "cm"),
+  clustering_distance_rows = "euclidean",
+  column_dend_height = unit(2, "cm"),
+  clustering_distance_columns = dist_no_na
+)
+
+plot(
+  h_org_combat_data,
+  heatmap_legend_side = "right",
+  annotation_legend_side = "right",
+  merge_legends = TRUE, 
+  padding = unit(c(0, 0, 0, 0), "mm")
+)
+
+heat_g_org_combat_data <- grid.grabExpr(plot(
+  h_org_combat_data,
+  heatmap_legend_side = "right",
+  annotation_legend_side = "right",
+  merge_legends = TRUE, 
+  padding = unit(c(0, 0, 0, 0), "mm")
+))
+
+grid.arrange(ppca_plot_org_combat_data, heat_g_org_combat_data, ncol = 2, widths = c(1, 1))
+ggsave(paste0(figure_output,'org_data_missing_used_for_combat_heatmap_and_ppca.png'), plot = grid.arrange(ppca_plot_org_combat_data, heat_g_org_combat_data, ncol = 2, widths = c(1, 1)), width = 6.47 * 2, height = 5.94 * 1, dpi = 300)
 
 
+###LMM combat----
+combatch_mixed_model <- lmer(combat ~ lab + (1 |drug) + (1|Patient.num), combatch_all_datasets)
+summary(combatch_mixed_model)
+check_model(combatch_mixed_model)
+
+#Combat box-cox traansform
+combatch_all_datasets$combat_pos <- combatch_all_datasets$combat + 10.1
+MASS::boxcox(combat_pos ~ time_until_sample_usage, 
+             data = combatch_all_datasets,
+             lambda = seq(-0.25, 2, length.out = 10))
+
+combatch_all_datasets$combat_boxcox <- ((combatch_all_datasets$combat)^0.5 - 1) / 0.5
+
+for(j in unique(combatch_all_datasets$drug)){
+  combatch_all_datasets$combat_boxcox_sclaed2[combatch_all_datasets$drug==j] <-
+    scale(combatch_all_datasets$combat_boxcox[combatch_all_datasets$drug==j])
+}
+
+ggplot(combatch_all_datasets, aes(x=combat)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(combatch_all_datasets, aes(x=combatch_boxcox)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+ggplot(combatch_all_datasets, aes(x=combat_boxcox_sclaed2)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+variables <- c("time_until_sample_usage", "medium", "cells", "positive_control", "centrifugation_procedure", "plate_reader")
+metrics <- c("combat")
+combat_models <- list()
+for (m in metrics[1:6]){
+  for (v in variables){
+    model_name_plot <- case_when(v == "time_until_sample_usage" ~ "time until usage", 
+                                 v == "microenvironmental_stimuli" ~ "microenvironmental stimuli", 
+                                 v == "positive_control" ~ "positive control-doses-readout-cell counting", 
+                                 v == "centrifugation_procedure" ~ "centrifugation procedure", 
+                                 v == "plate_reader" ~ "plate reader",
+                                 .default = v)
+    print(m)
+    print(v)
+    m_box <- paste0(m, "_boxcox_sclaed2")
+    # Construct formula as a string
+    formula_str <- paste0(m_box, " ~ ", v, " + (1|Patient.num)", " + (",v,"|drug)")
+    # Convert string to formula
+    f <- as.formula(formula_str)
+    model_name <- paste0(m, "_by_", v)
+    combat_models[[model_name]] <- lmer(f,combatch_all_datasets)
+    print(summary(combat_models[[model_name]]))
+  }
+}
+
+combat_models_df <- model_results(combat_models, data_frame_org=combatch_all_datasets)
+colnames(combat_models_df) <- gsub("_", " ", colnames(combat_models_df))     
+colnames(combat_models_df) <- sapply(colnames(combat_models_df), tools::toTitleCase)
+combat_models_df <- combat_models_df[order(combat_models_df$`Corrected p Value`),]
+
+tm <- forest_theme(base_size =9,
+                   arrow_type = "closed",
+                   base_family = "Arial",
+                   footnote_gp = gpar(col = "black", cex = 0.6), 
+                   line_size = 0.5, 
+                   align = "center", 
+                   footnote_parse = F)
+
+combat_models_df$` ` <- paste(rep(" ", 30), collapse = " ")
+combat_models_df$`Corrected p-value` <- round(combat_models_df$`Corrected p Value`, 4)
+combat_models_df$`Corrected p-value` <- format(combat_models_df$`Corrected p-value`, scientific = FALSE, trim = TRUE)
+combat_models_df <- combat_models_df %>% mutate(`p-valueᵃ` = ifelse(combat_models_df$`Corrected p-value` == '0.0000', '<0.0001', as.character(combat_models_df$`Corrected p-value`)))
+combat_models_df$`Experimental Variable` <- combat_models_df$`Fixed Effect Term` 
+combat_models_df$`Reference Condition` <- combat_models_df$`Ref Group`
+
+p_combat <- forest(combat_models_df[,c('Experimental Variable','Reference Condition', ' ', 'p-valueᵃ')],
+                   est = combat_models_df$`Fixed Effect Coefficient`,
+                   lower = combat_models_df$Lower, 
+                   upper = combat_models_df$Upper,
+                   sizes = 1,
+                   ci_column = 3,
+                   ref_line = 0,
+                   grid = F,
+                   #arrow_lab = c("Lower DSS2 than reference group", "Higher DSS2 than refernce group"),
+                   xlim = c(-1, 1),
+                   #ticks_at = c(-1, -0.5, 0, 0.5, 1),
+                   #footnote = "\n\nᵃBonferroni corrected",
+                   theme = tm, 
+                   xlab = expression('Change in Combat corrected DSS'[2]),
+                   font.label = list(size = 10, family = "Arial"),
+                   font.ticks = list(size = 8),
+                   txt_gp = list(label = gpar(fontsize = 10),  # this controls all text
+                                 xlab = gpar(fontsize = 10),
+                                 ticks = gpar(fontsize = 10))
+) 
+
+# Define the physical dimensions (cm) and resolution
+output_width_cm <- 14.4 #9.5
+output_height_cm <- 14 #10
+dpi <- 300  # Resolution in dots per inch
+
+# Convert cm to inches (1 inch = 2.54 cm)
+output_width_in <- output_width_cm / 2.54
+output_height_in <- output_height_cm / 2.54
+
+# Convert inches to pixels for the PNG device
+output_width_px <- output_width_in * dpi
+output_height_px <- output_height_in * dpi
+
+# Calculate scaling factors for the gtable
+scale_width <- output_width_cm / 10  # Base width adjustment (10 cm as reference)
+scale_height <- output_height_cm / 10  # Base height adjustment (10 cm as reference)
+
+p_combat <- edit_plot(p_combat, gp = gpar(cex=1.5, fontfamily="Arial")) #1.4
+p_combat <- edit_plot(p_combat, part = "header", gp = gpar(cex=1.5, fontfamily="Arial"))
+
+p_combat <- edit_plot(p_combat, col = 4, part = "header",
+                      which = "text",
+                      hjust = unit(0.5, "npc"),
+                      x = unit(0.5, "npc"))
+p_combat <- edit_plot(p_combat, col = 4, part = "body",
+                      which = "text",
+                      hjust = unit(0.5, "npc"),
+                      x = unit(0.5, "npc"))
+
+# Scale the gtable layout
+scaled_p_combat <- gtable::gtable_filter(p_combat, pattern = ".*", trim = TRUE)  # Keep all grobs
+scaled_p_combat$widths <- scaled_p_combat$widths * scale_width
+scaled_p_combat$heights <- scaled_p_combat$heights * scale_height
+
+png(paste0(figure_output,'Forest_plot_combat.png'), height = 16, width = 46, unit = "cm", res = 300)
+grid.newpage()
+grid.draw(scaled_p_combat)
+dev.off()
+
+####
+variables <- c("medium")
+metrics <- c("DSS2", "DSS2_boxcox_sclaed2", "DSS1", "DSS1_boxcox_sclaed2")#, "DSS3", "DSS3_boxcox_sclaed2", "AUC", "AUC_boxcox_sclaed2", "auc_a", "auc_a_boxcox_sclaed2", "IC50", "IC50_boxcox_sclaed2")
+for (m in metrics){
+  formula_str <- paste0(m, " ~ medium + (1|Patient.num)", " + (medium|drug)")
+  # Convert string to formula
+  f <- as.formula(formula_str)
+  print(f)
+  model <- lmer(f,all_response_metrics)
+  
+  pp_check_plot <- check_model(model, check = "pp_check", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3", "black"))
+  plot_pp_check <- plot(pp_check_plot)
+  plot_theme <- theme(text = element_text(family = "Arial", color= "black", size = 10),
+                      plot.title = element_text(hjust = 0.5, vjust = 1,color= "black"),
+                      axis.title.x = element_text(family = "Arial", color = "black", size = 10),  
+                      axis.title.y = element_text(family = "Arial", color = "black", size = 10),
+                      axis.text.x = element_text(family = "Arial", color = "black", size = 8),  
+                      axis.text.y = element_text(family = "Arial", color = "black", size = 8), 
+                      plot.subtitle = element_blank(), 
+                      legend.position = "top",  
+                      legend.text = element_text(family = "Arial", color = "black", size = 10),
+                      panel.grid.major = element_blank(), 
+                      panel.grid.minor = element_blank(),  
+                      panel.background = element_blank(),
+                      strip.text = element_text(family = "Arial", color = "black", size = 8, face = "plain"),  
+                      strip.background = element_blank(), 
+                      plot.margin = margin(10, 10, 10, 10))
+  plot_pp_check_adjusted <- plot_pp_check$PP_CHECK + plot_theme + labs(x = m)
+  print(plot_pp_check_adjusted)
+  
+  homogeneity_plot <- check_model(model, check = "homogeneity", panel = FALSE, title_size = 10, axis_title_size = 10, base_size = 0, colors = c("#fccde5", "#80b1d3"))
+  plot_homogeneity <- plot(homogeneity_plot)
+  plot_homogeneity_adjusted <- plot_homogeneity$HOMOGENEITY + labs(y = expression(sqrt("|Std. Residuals|")))+ plot_theme
+  print(plot_homogeneity)
+}
 
 
 
@@ -1244,7 +1796,11 @@ dev.off()
 ########################################################################################################################
 #----
 #----
-
+test1 <- all_response_metrics
+library(arsenal)
+res_com <- summary(comparedf(test1[,c('drug', 'Patient.num', 'auc_a')],all_response_metrics[,c('drug', 'Patient.num', 'auc_a')], by = c('drug', 'Patient.num')))
+yo <-res_com$diffs.table
+subset(yo, var.x != 'cells' & var.x != 'Cells1')
 
 #Import datasets ----
 #Karolinska

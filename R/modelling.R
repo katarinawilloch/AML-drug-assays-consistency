@@ -87,9 +87,10 @@ source('~/Desktop/UiO/Project 1/Code/R/model_functions.R')
 #Figure output location
 figure_output <- '~/Desktop/UiO/Project 1/Figures/New karolinska data/'
 initial_cleansing <- "~/Desktop/UiO/Project 1/Data/Second run/"
+all_response_metrics_location <- "~/Desktop/UiO/Project 1/Data/Response scores/"
 
 #Import datset containing all metric responses
-all_response_metrics <- read_csv('~/Desktop/UiO/Project 1/Data/Response scores/all_response_metrics_all_labs.csv')
+all_response_metrics <- read_csv(paste0(all_response_metrics_location,"all_response_metrics_all_labs.csv"))
 #Removing data without sample id
 all_response_metrics <- all_response_metrics[!is.na(all_response_metrics$Patient.num),]
 #Renaming drugs to first letter capital and rest lower case
@@ -210,7 +211,8 @@ all_response_metrics <- left_join(all_response_metrics, subset(beat_aml_clinical
   ) %>%
   select(-Tissue.x, -Tissue.y, -sample.x, -sample.y, -Disease.status.x, -Disease.status.y)
 
-subset(all_response_metrics, lab == 'Beat AML')
+t_df <- subset(all_response_metrics, lab == 'Beat AML')
+duplicates <- t_df[duplicated(t_df[, c("Patient.num", "drug", "DSS2")]), ]
 
 #Getting sample counts for table in article----
 ##Karolinska
@@ -501,11 +503,13 @@ for (m in metrics[1:6]){
     f <- as.formula(formula_str)
     model_name <- paste0(m, "_by_", v)
     models[[model_name]] <- lmer(f,all_response_metrics)
-    model_diagnostics(models[[model_name]], paste0("/Users/katarinawilloch/Desktop/UiO/Project 1/Code/Diagnostic plots/", m, "_", v, "_"), model_name = model_name_plot, metric = m) 
+    #model_diagnostics(models[[model_name]], paste0("/Users/katarinawilloch/Desktop/UiO/Project 1/Code/Diagnostic plots/", m, "/", v, "_"), model_name = model_name_plot, metric = m) 
     print(summary(models[[model_name]]))
   }
 }
-
+medium_model <- lmer(DSS2_boxcox_sclaed2 ~ positive_control + medium + centrifugation_procedure + (1|Patient.num) + (lab|drug), all_response_metrics)
+summary(medium_model)
+colnames(all_response_metrics)
 
 ##Forestplot DSS2----
 dss2_cols <- grep("DSS2", names(models), value = TRUE)
@@ -1006,15 +1010,6 @@ new_df <- df1_filtered %>%
 # View the new data frame
 print(new_df)
 
-# Calculate adjusted R^2
-adjusted_r2 <- summary(lm_model)$adj.r.squared
-
-# Extract the p-value for Fresh
-pval <- summary(lm_model)$coefficients[2, 4] 
-
-# Apply FDR adjustment (assuming multiple tests, example 10)
-pval_fdr <- p.adjust(pval, method = "fdr")
-
 pearson_cor_test <- cor.test(new_df$Fresh, new_df$Frozen, method = "pearson")
 pearson_cor <- pearson_cor_test$estimate
 p_value <- pearson_cor_test$p.value
@@ -1034,14 +1029,15 @@ display.brewer.pal(n = 10, name = "Set3")
 # Create the plot
 scatterplot_fresh_vs_frozen_karolinska <- ggplot(new_df, aes(x = Fresh, y = Frozen)) +
   geom_point(aes(color = factor(Patient_ID)), size = 3) +
-  ylim(0, 45) + 
-  xlim(0,45) +
+  geom_abline(intercept = 0, slope = 1, color = "black") +
+  ylim(0, 50) + 
+  xlim(0,50) +
   coord_fixed(ratio = 1)+
   geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
   scale_color_manual(values = custom_colors) +
   annotate(
     "text", 
-    x = 0, y = 45, 
+    x = 0, y = 50, 
     label = annotation_text, 
     size = 3.51, family = "Arial", hjust = 0, vjust = 1
   ) +
@@ -1062,7 +1058,280 @@ scatterplot_fresh_vs_frozen_karolinska <- ggplot(new_df, aes(x = Fresh, y = Froz
 ggsave(paste0(figure_output,"Karolinska_fresh_vs_frozen.png"), plot = scatterplot_fresh_vs_frozen_karolinska, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
 
 ####Oslo----
+enserink_repeated_frozen <- read_excel('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Original data/Enserink-lab/repeated from frozen/DSS_score/DSS/Original_DSS2_2025-02-24.xlsx')
+
+enserink_pubchem_drug_names <- read_csv('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Initial cleansing/enserink_lab_drug_information_pubchem.csv')
+
+enserink_repeated_frozen <- merge(enserink_repeated_frozen, enserink_pubchem_drug_names, by.x = "DRUG_NAME", by.y = "org_drug_name", all.y = TRUE)
+enserink_repeated_frozen$...1 <- NULL
+
+enserink_full_dss_set <- read_csv('/Users/katarinawilloch/Desktop/UiO/Project 1/Data/Second cleansing/dss_enserink_common_drugs.csv')
+enserink_full_dss_set$sample
+
+enserink_repeated_frozen_long <- enserink_repeated_frozen %>%
+  pivot_longer(cols = -c('DRUG_NAME', 'ID', 'pubchem_drug_name'),  # Select all columns except the identifier column (e.g., "col1")
+               names_to = "Patient.num",  # New column to store the original column names
+               values_to = "DSS2")
+unique(enserink_repeated_frozen_long$Patient.num)
+
+enserink_repeated_frozen_long$sample <- 'frozen'
+
+enserink_repeated_frozen_long <- enserink_repeated_frozen_long %>%
+  mutate(Patient.num = ifelse(Patient.num == "Pt34r_frozen", "Patient 34_relapse", Patient.num))
+enserink_repeated_frozen_long <- enserink_repeated_frozen_long %>%
+  mutate(Patient.num = ifelse(Patient.num == "Pt30r_repeat", "Patient 30_relapse", Patient.num))
+enserink_repeated_frozen_long <- enserink_repeated_frozen_long %>%
+  mutate(Patient.num = ifelse(Patient.num == "Pt33_frozen", "Patient 33", Patient.num))
+
+enserink_repeated_frozen_long$drug <- enserink_repeated_frozen_long$pubchem_drug_name
+enserink_repeated_frozen_long_subset <- subset(enserink_repeated_frozen_long, select = c("drug", "DSS2", "Patient.num", "sample"))
+
+names(enserink_full_dss_set)
+enserink_full_dss_set_subset <- subset(enserink_full_dss_set, Patient.num == 'Patient 34_relapse' | Patient.num == 'Patient 30_relapse' | Patient.num == 'Patient 33', select = c("drug", "DSS2", "Patient.num", "sample"))
+enserink_fresh_and_frozen_patients <- rbind(enserink_repeated_frozen_long_subset, enserink_full_dss_set_subset)
+
+
+enserink_fresh_and_frozen_patients$DSS2[enserink_fresh_and_frozen_patients$DSS2 < 0]
+
+
+enserink_fresh_vs_frozen<- enserink_fresh_and_frozen_patients %>%
+  group_by(Patient.num, drug) %>%
+  reframe(Fresh = DSS2[sample == 'fresh'],
+          Frozen = DSS2[sample == 'frozen'])
+
+enserink_fresh_vs_frozen$Patient.num <- str_replace_all(enserink_fresh_vs_frozen$Patient.num, "_", " ")
+enserink_fresh_vs_frozen <- enserink_fresh_vs_frozen %>%
+  mutate(Patient.num = ifelse(Patient.num == "Patient 33", "Patient 33 diagnosis", Patient.num))
+
+
+# Example data
+new_df <- data.frame(
+  Fresh = rnorm(100, 10, 5),
+  Frozen = rnorm(100, 20, 10),
+  Patient.num = sample(1:10, 100, replace = TRUE)
+)
+
+pearson_cor_test <- cor.test(enserink_fresh_vs_frozen$Fresh, enserink_fresh_vs_frozen$Frozen, method = "pearson")
+pearson_cor <- pearson_cor_test$estimate
+p_value <- pearson_cor_test$p.value
+
+# Prepare the annotation text
+annotation_text <- paste0(
+  "R = ", round(pearson_cor, 3),
+  "\np ", ifelse(format(p_value, scientific = TRUE, digits = 3)<0.001,paste("=",format(p_value, scientific = TRUE, digits = 3)), "<0.001")
+)
+
+custom_colors <- c(
+  "#8dd3c7", "#bebada", "#fb8072",
+  "#80b1d3", "#fdb462", "#b3de69", "#fccde5",
+  "#bc80bd", "#ccebc5"  # Added two complementary colors
+)
+display.brewer.pal(n = 10, name = "Set3")
+# Create the plot
+scatterplot_fresh_vs_frozen_enserink <- ggplot(enserink_fresh_vs_frozen, aes(x = Fresh, y = Frozen)) +
+  geom_point(aes(color = factor(Patient.num)), size = 3) +
+  geom_abline(intercept = 0, slope = 1, color = "black") +
+  ylim(0, 50) +
+  xlim(0,50) +
+  coord_fixed(ratio = 1)+
+  geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
+  scale_color_manual(values = custom_colors) +
+  annotate(
+    "text",
+    x = 0, y = 50,
+    label = annotation_text,
+    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+  ) +
+  labs(color = "Patient ID", x= expression("Fresh DSS"[2]), y = expression("Frozen DSS"[2])) +
+  theme_classic() +
+  theme(
+    text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
+    axis.text = element_text(size = 8, family = "Arial"), # Tick labels Arial, size 8
+    #legend.text = element_text(size = 10, family = "Arial"), # Legend text Arial, size 10
+    #legend.title = element_text(size = 10, family = "Arial"), # Legend title Arial, size 10
+    legend.background = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_blank(), # Optional: Remove background panel
+    plot.background = element_blank(),   # Optional: Remove plot background
+    legend.position = c(0.85, 0.25)
+  )
+scatterplot_fresh_vs_frozen_enserink
+ggsave("/Users/katarinawilloch/Desktop/UiO/Project 1/Figures/draw/scatterplot_fresh_vs_frozen_enserink.png", plot = scatterplot_fresh_vs_frozen_enserink, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09 # width = 10.76, height = 8.09 width = 10.76, height = 8.09, units="cm"
+
+fresh_frozen <- (
+  (scatterplot_fresh_vs_frozen_karolinska | scatterplot_fresh_vs_frozen_enserink)
+)+ plot_annotation(tag_levels = "a", title = "", caption = "", theme = theme(
+  plot.title = element_text(hjust = 0.5),
+  plot.caption = element_text(hjust = 0, size = 10)  # hjust = 1 = right aligned
+))
+ggsave(paste0(figure_output,"scatterplot_fresh_vs_frozen.png"), plot = fresh_frozen, width = 21.52, height = 8.09, units="cm") #width = 20.76, height = 7.09 # width = 10.76, height = 8.09 width = 10.76, height = 8.09, units="cm"
+
+
 ###Diagnosis vs Relapse----
+####Beat AML----
+result_beat_aml <- all_response_metrics %>%
+  group_by(Patient_ID) %>%
+  filter(lab == 'Beat AML') %>%
+  filter(Disease.status == 'Refractory' | Disease.status == 'Diagnosis') %>%
+  summarise(unique_x_count = n_distinct(Disease.status)) %>%
+  filter(unique_x_count > 1)
+
+df1_filtered_beat_AML <- all_response_metrics[all_response_metrics$Patient_ID %in% result_beat_aml$Patient_ID, ]
+
+new_df_beat_aml <- df1_filtered_beat_AML[,c("Patient_ID", "drug", "Disease.status", "DSS2")] %>%
+  group_by(Patient_ID, drug, Disease.status) %>%
+  summarise(DSS2 = mean(DSS2), .groups = "drop") %>%  #
+  pivot_wider(
+    names_from = Disease.status,
+    values_from = DSS2
+  )
+
+new_df_beat_aml$Patient_ID <- str_replace_all(new_df_beat_aml$Patient_ID, '_', ' ')
+
+# View the new data frame
+print(new_df_beat_aml)
+pearson_cor_test_beat_aml <- cor.test(new_df_beat_aml$Diagnosis, new_df_beat_aml$Refractory, method = "pearson")
+pearson_cor_beat_aml <- pearson_cor_test_beat_aml$estimate
+p_value_beal_aml <- pearson_cor_test_beat_aml$p.value
+
+# Prepare the annotation text
+annotation_text_beat_aml <- paste0(
+  "R = ", round(pearson_cor_beat_aml, 3),
+  "\np = ", ifelse(format(p_value_beal_aml, scientific = TRUE, digits = 3) < 0.001, format(p_value, scientific = TRUE, digits = 3), '<0.001')
+)
+
+custom_colors <- c(
+  "#8dd3c7", "#ffffb3", "#bebada", "#fb8072",
+  "#80b1d3", "#fdb462", "#b3de69", "#fccde5",
+  "#bc80bd", "#ccebc5"  # Added two complementary colors
+)
+colors <- c(
+  brewer.pal(12, "Set3"),
+  brewer.pal(3, "Pastel1")[1:2]
+)
+display.brewer.pal(n = 14, name = "Set3")
+# Create the plot
+scatterplot_diagnosis_vs_refactory_beat_aml <- ggplot(new_df_beat_aml, aes(x = Diagnosis, y = Refractory)) +
+  geom_point(aes(color = factor(Patient_ID)), size = 3) +
+  geom_abline(intercept = 0, slope = 1, color = "black") +
+  ylim(0, 50) +
+  xlim(0,50) +
+  coord_fixed(ratio = 1)+
+  geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
+  scale_color_manual(values = colors, na.translate = FALSE) +
+  labs(color = "Patient ID", x= expression("Diagnosis DSS"[2]), y = expression("Refactory DSS"[2])) +
+  annotate(
+    "text",
+    x = 0, y = 50,
+    label = annotation_text_beat_aml,
+    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+  ) +
+  labs(color = "Patient ID") +
+  theme_classic() +
+  theme(
+    text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
+    axis.text = element_text(size = 8, family = "Arial"), # Tick labels Arial, size 8
+    legend.text = element_text(size = 10, family = "Arial"), # Legend text Arial, size 10
+    legend.title = element_text(size = 10, family = "Arial"), # Legend title Arial, size 10
+    legend.background = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_blank(), # Optional: Remove background panel
+    plot.background = element_blank()   # Optional: Remove plot background
+  )
+
+ggsave(paste0(figure_output,"diagnosis_vs_refactory_beat_aml.png"), plot = scatterplot_diagnosis_vs_refactory_beat_aml, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+
+####Helsinki----
+result_helsinki <- all_response_metrics %>%
+  group_by(Patient_ID) %>%
+  filter(lab == 'Helsinki') %>%
+  filter(Disease.status == 'Refractory' | Disease.status == 'Diagnosis') %>%
+  summarise(unique_x_count = n_distinct(Disease.status)) %>%
+  filter(unique_x_count > 1)
+
+df1_filtered_helsinki <- all_response_metrics[all_response_metrics$Patient_ID %in% result_helsinki$Patient_ID, ]
+
+new_df_helsinki <- df1_filtered_helsinki[,c("Patient_ID", "drug", "Disease.status", "DSS2")] %>%
+  group_by(Patient_ID, drug, Disease.status) %>%
+  summarise(DSS2 = mean(DSS2), .groups = "drop") %>%  #
+  pivot_wider(
+    names_from = Disease.status,
+    values_from = DSS2
+  )
+
+new_df_helsinki$Patient_ID <- str_replace_all(new_df_helsinki$Patient_ID, '_', ' ')
+
+# View the new data frame
+print(new_df_helsinki)
+pearson_cor_test_helsinki <- cor.test(new_df_helsinki$Diagnosis, new_df_helsinki$Refractory, method = "pearson")
+pearson_cor_helsinki <- pearson_cor_test_helsinki$estimate
+p_value_helsinki <- pearson_cor_test_helsinki$p.value
+
+# Prepare the annotation text
+annotation_text_helsinki <- paste0(
+  "R = ", round(pearson_cor_helsinki, 3),
+  "\np = ", ifelse(format(p_value_helsinki, scientific = TRUE, digits = 3) < 0.001, format(p_value, scientific = TRUE, digits = 3), '<0.001')
+)
+
+custom_colors <- c(
+  "#8dd3c7", "#bebada", "#fb8072",
+  "#80b1d3", "#fdb462", "#b3de69", "#fccde5",
+  "#bc80bd", "#ccebc5"  # Added two complementary colors
+)
+colors <- c(
+  brewer.pal(12, "Set3"),
+  brewer.pal(3, "Pastel1")[1:2]
+)
+display.brewer.pal(n = 14, name = "Set3")
+# Create the plot
+scatterplot_diagnosis_vs_refactory_helsinki <- ggplot(new_df_helsinki, aes(x = Diagnosis, y = Refractory)) +
+  geom_point(aes(color = factor(Patient_ID)), size = 3) +
+  geom_abline(intercept = 0, slope = 1, color = "black") +
+  ylim(0, 50) +
+  xlim(0,50) +
+  coord_fixed(ratio = 1)+
+  geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
+  scale_color_manual(values = custom_colors, na.translate = FALSE) +
+  labs(color = "Patient ID", x= expression("Diagnosis DSS"[2]), y = expression("Refactory DSS"[2])) +
+  annotate(
+    "text",
+    x = 0, y = 50,
+    label = annotation_text_helsinki,
+    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+  ) +
+  labs(color = "Patient ID") +
+  theme_classic() +
+  theme(
+    text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
+    axis.text = element_text(size = 8, family = "Arial"), # Tick labels Arial, size 8
+    legend.text = element_text(size = 10, family = "Arial"), # Legend text Arial, size 10
+    legend.title = element_text(size = 10, family = "Arial"), # Legend title Arial, size 10
+    legend.background = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_blank(), # Optional: Remove background panel
+    plot.background = element_blank()   # Optional: Remove plot background
+  )
+
+ggsave(paste0(figure_output,"diagnosis_vs_refactory_helsinki.png"), plot = scatterplot_diagnosis_vs_refactory_helsinki, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+
+diagnosis_refactory <- (
+  (scatterplot_diagnosis_vs_refactory_beat_aml | scatterplot_diagnosis_vs_refactory_helsinki)
+)+ plot_annotation(tag_levels = "a", title = "", caption = "", theme = theme(
+  plot.title = element_text(hjust = 0.5),
+  plot.caption = element_text(hjust = 0, size = 10)  # hjust = 1 = right aligned
+))
+ggsave(paste0(figure_output,"scatterplot_diagnosis_refactory.png"), plot = diagnosis_refactory, width = 21.52, height = 9.09, units="cm") #width = 20.76, height = 7.09 # width = 10.76, height = 8.09 width = 10.76, height = 8.09, units="cm"
+
+t_lm <- lmer(Diagnosis ~ Refractory + (1|Patient_ID) + (1|drug), new_df_beat_aml)
+summary(t_lm)
+all_response_metrics$DSS2_boxcox_sclaed2
+yaho <- lmer(DSS2_boxcox_sclaed2 ~ Disease.status + sample + Tissue + (1|Patient.num) +(1|drug), all_response_metrics)
+summary(yaho)
+check_model(yaho)
+
 ###Blood vs Bone marrow----
 ####Beat AML----
 tissue_same_sample_beat_aml <- all_response_metrics %>%
@@ -1119,6 +1388,7 @@ my_colors <- c(paired, set3)[1:21]
 # Create the plot
 scatterplot_blood_bone_marrow_beat_AML <- ggplot(tissue_df_beat_AML, aes(x = `Peripheral Blood`, y = `Bone Marrow`)) +
   geom_point(aes(color = factor(Patient_ID)), size = 3) +
+  geom_abline(intercept = 0, slope = 1, color = "black") +
   ylim(0, 55) + 
   xlim(0,55) +
   coord_fixed(ratio = 1)+
@@ -1126,10 +1396,11 @@ scatterplot_blood_bone_marrow_beat_AML <- ggplot(tissue_df_beat_AML, aes(x = `Pe
   scale_color_manual(values = my_colors)+
   annotate(
     "text", 
-    x = 0, y = 55, 
+    x = 0, y = 50, 
     label = annotation_text, 
-    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+    size = 3.51, family = "Arial", hjust = 0, vjust = 0.2
   ) +
+  #scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   labs(color = "Patient ID", x= expression("Peripheral Blood DSS"[2]), y = expression("Bone Marrow DSS"[2])) +
   theme_classic() + 
   theme(
@@ -1184,18 +1455,20 @@ display.brewer.pal(n = 10, name = "Set3")
 # Create the plot
 scatterplot_blood_bone_marrow_oslo_karolinska <- ggplot(tissue_df_oslo_karolinska, aes(x = `Peripheral Blood`, y = `Bone Marrow`)) +
   geom_point(aes(color = factor(Patient_ID)), size = 3) +
-  ylim(0, 45) + 
-  xlim(0,45) +
+  geom_abline(intercept = 0, slope = 1, color = "black") +
+  ylim(0, 55) + 
+  xlim(0,55) +
   coord_fixed(ratio = 1)+
   geom_smooth(method = "lm", se = TRUE, fullrange = TRUE) +
   scale_color_manual(values = custom_colors) +
   annotate(
     "text", 
-    x = 0, y = 45, 
+    x = 0, y = 50, 
     label = annotation_text, 
-    size = 3.51, family = "Arial", hjust = 0, vjust = 1
+    size = 3.51, family = "Arial", hjust = 0, vjust = 0.2
   ) +
-  labs(color = "Patient ID", x= expression("Blood DSS"[2]), y = expression("Bone Marrow DSS"[2])) +
+  #scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(color = "Patient ID", x= expression("Peripheral Blood DSS"[2]), y = expression("Bone Marrow DSS"[2])) +
   theme_classic() + 
   theme(
     text = element_text(family = "Arial", size = 10),    # All text Arial, size 10
@@ -1211,6 +1484,20 @@ scatterplot_blood_bone_marrow_oslo_karolinska <- ggplot(tissue_df_oslo_karolinsk
   )
 
 ggsave(paste0(figure_output,"Bloor_Bone_Marrow_oslo_karolinska.png"), plot = scatterplot_blood_bone_marrow_oslo_karolinska, width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+
+blood_bone_marrow <- (
+  (scatterplot_blood_bone_marrow_beat_AML | scatterplot_blood_bone_marrow_oslo_karolinska)
+)+ plot_annotation(tag_levels = "a", title = "", caption = "", theme = theme(
+  plot.title = element_text(hjust = 0.5),
+  plot.caption = element_text(hjust = 0, size = 10)  # hjust = 1 = right aligned
+))
+blood_bone_marrow
+ggsave(paste0(figure_output,"scatterplot_blood_bone_marrow.png"), plot = blood_bone_marrow, width = 21.52, height = 8.09, units="cm")#8.09 #width = 20.76, height = 7.09 # width = 10.76, height = 8.09 width = 10.76, height = 8.09, units="cm"
+
+ggsave(paste0(figure_output,"Bloor_Bone_Marrow_oslo_karolinska.png"), plot = blood_bone_marrow[[2, 1]], width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+blood_bone_marrow[[1, 1]]
+ggsave(paste0(figure_output,"Bloor_Bone_Marrow_beat_AML.png"), plot = blood_bone_marrow[[1, 1]], width = 10.76, height = 8.09, units="cm") #width = 20.76, height = 7.09
+
 
 
 ##Model assessment biospecimen----
@@ -1228,7 +1515,7 @@ summary(mixed_model_sample_DSS2)
 check_model(mixed_model_sample_DSS2)
 icc(mixed_model_sample_DSS2)
 
-mixed_model_sample_DSS2_1 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (lab|drug), subset(all_response_metrics))
+mixed_model_sample_DSS2_1 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (lab|drug), all_response_metrics)
 summary(mixed_model_sample_DSS2_1)
 check_model(mixed_model_sample_DSS2_1)
 mixed_model_sample_DSS2_2 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (1|drug) + (1|lab), subset(all_response_metrics))
@@ -1239,9 +1526,10 @@ check_model(mixed_model_sample_DSS2_3)
 #mixed_model_sample_DSS2_3 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (1|drug) + (1|sample) + (1|Tissue) + (1|Disease.status) + (1|lab), subset(all_response_metrics))
 mixed_model_sample_DSS2_4 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|drug) + (1|sample) + (1|Tissue) + (1|Disease.status) + (1|lab), subset(all_response_metrics))
 mixed_model_sample_DSS2_5 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (sample|drug) + (Tissue|drug) + (Disease.status|drug) + (1|lab), subset(all_response_metrics))
-mixed_model_sample_DSS2_6 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (sample|drug) + (Tissue|drug) + (Disease.status|drug), subset(all_response_metrics))
+mixed_model_sample_DSS2_6 <- lmer(DSS2_boxcox_sclaed2 ~ sample + Tissue + Disease.status + (1|Patient.num) + (sample|drug) + (Tissue|drug) + (Disease.status|drug), all_response_metrics)
+yaho <- lmer(DSS2_boxcox_sclaed2 ~ Disease.status + sample + Tissue + (1|Patient.num) +(1|drug), all_response_metrics)
 
-anova(mixed_model_sample_DSS2, mixed_model_sample_DSS2_1, mixed_model_sample_DSS2_2, mixed_model_sample_DSS2_3, mixed_model_sample_DSS2_4, mixed_model_sample_DSS2_5, mixed_model_sample_DSS2_6, test = "LRT")
+anova(mixed_model_sample_DSS2_1, yaho, test = "LRT")
 
 
 ##Forestplot biospecimen----
@@ -1261,7 +1549,7 @@ df_dss2_models_sample <- df_dss2_models_sample %>% mutate(`Biospecimen Type`= ca
 
 
 df_dss2_models_sample <- df_dss2_models_sample %>% mutate(`Reference Group` = case_when(`Fixed Effect Term` == "samplefrozen" ~ "Sample: Fresh", 
-                                                                                        str_detect(`Fixed Effect Term`, "Disease.status") ~ "Disease Starus: Diagnosis",
+                                                                                        str_detect(`Fixed Effect Term`, "Disease.status") ~ "Disease Status: Diagnosis",
                                                                                         `Fixed Effect Term` == "TissueBone marrow" ~ "Tissue: Blood", 
                                                                                         TRUE ~ `Fixed Effect Term`))
 
@@ -1273,7 +1561,7 @@ tm <- forest_theme(base_sixe = 12,
                    align = "center", 
                    footnote_parse = FALSE, 
                    line_size = 1.5, 
-                   xaxis_gp = gpar(fontsize = 10, fontfamily = "Arial"), 
+                   xaxis_gp = gpar(fontsize = 10 ), 
                    spacing = 2,)
 df_dss2_models_sample$` ` <- paste(rep(" ", 20), collapse = " ")
 df_dss2_models_sample$`p-value` <- round(df_dss2_models_sample$`p Value`, 4)
@@ -1297,7 +1585,7 @@ p_sample <- forest(df_dss2_models_sample[,c('Biospecimen Type', 'Reference Group
                    #footnote = "*1:LymphoPrepTM gradient centrifugation \n*2: Supernatant isolation at 300g 10min, density centrifugation at 400g for 20min without brake, afterwards always 300g 5 min",
                    theme = tm, 
                    xlab = expression('Change in Scaled DSS'[2]),
-                   font.label = list(size = 10, family = "Arial"),
+                   font.label = list(size = 10),
                    font.ticks = list(size = 9),)
 
 # Print plot
